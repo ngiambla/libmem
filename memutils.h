@@ -1,0 +1,53 @@
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+
+#ifndef __MEMUTILS_H__
+#define __MEMUTILS_H__
+
+// Defines
+#define __DO_NOT_INLINE__ 			/* Can enforce each allocator to be separate functions */
+#define ARENA_BYTES		65536	/* This makes each allocator's arena use 65536 bytes or 64 kB (Needs to be power of two) */
+#define MIN_REQ_SIZE 	0x10 	/* Make the minimum requestable size 16 (only applies to buddy, bit and lut) (Needs to be power of two)*/
+
+//==------------------------------------------==//
+//
+// [GNU - Based Allocation: Single Heap]
+void * 	gnu_malloc	(unsigned nbytes);
+void * 	gnu_realloc	(void * vp, unsigned newbytes);
+void * 	gnu_calloc	(unsigned nelem, unsigned elsize);
+void 	gnu_free 	(void * vp);
+//==-----------------------------------------
+//
+// [Linear Based Allocation: Single Heap]
+void * 	lin_malloc	(unsigned size);
+void * 	lin_realloc	(void * p, unsigned newbytes);
+void * 	lin_calloc	(unsigned nelem, unsigned elsize);
+void 	lin_free	(void * p);
+//==-----------------------------------------
+//
+// [Bitmap Based Allocation: Single Heap]
+void * 	bit_malloc	(unsigned size);
+void * 	bit_realloc	(void * p, unsigned newbytes);
+void * 	bit_calloc	(unsigned nelem, unsigned elsize);
+void 	bit_free	(void * p);
+//------------------------------------------
+//
+// [Buddy Based Allocation: Single Heap]
+void * 	bud_malloc	(unsigned size);
+void * 	bud_realloc	(void * p, unsigned newbytes);
+void * 	bud_calloc	(unsigned nelem, unsigned elsize);
+void 	bud_free	(void * p);
+//------------------------------------------
+//
+// [Buddy Based Allocation: Single Heap]
+void * 	lut_malloc	(unsigned size);
+void * 	lut_realloc	(void * p, unsigned newbytes);
+void * 	lut_calloc	(unsigned nelem, unsigned elsize);
+void 	lut_free	(void * p);
+//------------------------------------------
+
+void printdbg(char * strr);
+void printbytes(int isMalloc, int select, int value);
+
+#endif
