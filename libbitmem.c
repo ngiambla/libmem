@@ -160,7 +160,7 @@ static uint16_t bitsize[BLOCKS] = {0};
       }
 
    RET_ADDR:
-      printf("addr = %08x \n", addr);
+      printf("addr = %08x\n", (uint32_t)addr);
       printf("+=========================================+\n\n");
       printbytes(1, 0, (uint32_t)addr);  
       return (void *)addr;
@@ -181,7 +181,7 @@ static uint16_t bitsize[BLOCKS] = {0};
    
 
    printf("+=========================================+\n");
-   printf("-> Freeing Mem @ Address 0x%08x\n", p);
+   printf("-> Freeing Mem @ Address 0x%08x\n", (uint32_t)p);
    printf("-> Starting bit: %d\n-> Starting idx: %d\n", bitmap_start_bit, map_index);
    printf("-> Bit offset: %d\n", real_bit_mod_res);
    printf("-> Bits to free: %d\n", bits_to_free);

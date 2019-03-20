@@ -6,9 +6,13 @@
 #define __MEMUTILS_H__
 
 // Defines
-#define __DO_NOT_INLINE__ 			/* Can enforce each allocator to be separate functions */
-#define ARENA_BYTES		65536	/* This makes each allocator's arena use 65536 bytes or 64 kB (Needs to be power of two) */
-#define MIN_REQ_SIZE 	0x10 	/* Make the minimum requestable size 16 (only applies to buddy, bit and lut) (Needs to be power of two)*/
+#define __DO_NOT_INLINE__ 				/* Can enforce each allocator to be separate functions */
+
+/* This makes each allocator's arena use 65536 bytes or 64 kB (Needs to be power of two) */
+#define ARENA_BYTES		65536
+/* Defines the minimum requestable size (only applies to buddy, bit and lut) (Needs to be power of two, and cannot be larger )*/
+#define MIN_REQ_SIZE 	16
+#define BUDDY_SAFETY_CHECK 		ARENA_BYTES/MIN_REQ_SIZE
 
 //==------------------------------------------==//
 //

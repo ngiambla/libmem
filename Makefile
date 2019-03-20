@@ -6,7 +6,7 @@ CXX = gcc
 
 _OBJS = unittests.o libgnumem.o libbitmem.o libbudmem2.o memutils.o
 OBJS = $(patsubst %,%,$(_OBJS))
-
+CFLAGS += -m32
 
 all: $(EXE)
 

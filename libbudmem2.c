@@ -55,16 +55,20 @@
 #define NUM_OF_LEAVES 								(uint32_t)(ARENA_BYTES/MIN_REQ_SIZE) 		
 #define NUM_OF_LEAVES_WORDS 						(uint32_t)(NUM_OF_LEAVES>>5)
 #define LOG2_MIN_REQ_SIZE 							(uint32_t)(BITS_TO_REPRESENT(MIN_REQ_SIZE)-1)
-#define TOTAL_LEVELS 								(uint32_t)(BITS_TO_REPRESENT(NUM_OF_LEAVES)-1)
+#define TOTAL_LEVELS 								(uint32_t)(BITS_TO_REPRESENT(NUM_OF_LEAVES))
 
+#if BUDDY_SAFETY_CHECK < 32
+#error "ARENA_BYTES/MIN_REQ_SIZE must be at most 32."
+#endif
 
 
 typedef struct uintx_t {
   uint32_t internal[NUM_OF_LEAVES_WORDS];
 } uintx_t;
 
-static uint32_t BUDDY_ARENA[MAX_BUDDY_CHUNK] 		= {0};
-static uintx_t tree[TOTAL_LEVELS] = {0} ;
+static uint32_t 	BUDDY_ARENA[MAX_BUDDY_CHUNK] 		= {0};
+static uint8_t 		ADDR_LUT[ARENA_BYTES] 			= {0};
+static uintx_t 		tree[TOTAL_LEVELS] 					= {0};
 
 
 
@@ -95,6 +99,44 @@ uint32_t intlog2 (uint32_t v) {  	// 32-bit word to find the log of
 
 
 
+void update_tree(int level) {
+	uint32_t starting_idx, next_idx;
+	uint32_t bitmap;
+	// Mark Up
+	for(int i = level; i >=1 ; --i) {
+
+		starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS-1 - i)) >> 5);
+		next_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS- i)) >> 5);
+
+		for(int j = starting_idx; j < NUM_OF_LEAVES_WORDS; j+=2) {
+			uint32_t tmp = 0;
+			printf("[A]tmp is %08x\n", tmp);
+			for(int k = 0; k < 32; k += 2 ) {
+				tmp |= (tree[i].internal[j]&(1<< k) | tree[i].internal[j]&(1<< (k+1))) << (k>>2);
+			}
+			
+			tmp <<= 16;
+
+			for(int k = 0; k < 32; k += 2 ) {
+				tmp |= (tree[i].internal[j+1]&(1<< k) | tree[i].internal[j+1]&(1<< (k+1))) << (k>>2);
+			}
+			tree[i+1].internal[next_idx] |= tmp;	
+			++next_idx;		
+			printf("[B]tmp is %08x\n", tmp);
+		}
+	}
+
+	// Mark Down
+	for(int i = level; i < TOTAL_LEVELS-1; ++i) {
+		starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS-1 - i))>>5);
+		for(int j = starting_idx; j < NUM_OF_LEAVES_WORDS; ++j) {
+			for(int k = 0; k < 32; ++k) {
+
+			}
+		}
+	}	
+}
+
 #ifdef __DO_NOT_INLINE__ 
    void * __attribute__ ((noinline)) bud_malloc(unsigned bytes)
 #else
@@ -106,6 +148,11 @@ uint32_t intlog2 (uint32_t v) {  	// 32-bit word to find the log of
 	uint32_t intLogBytes;
 	uint32_t level;
 	uint32_t bitmap;
+
+	if(bytes > ARENA_BYTES) {
+		printf("Size too large for arena depth.\n");
+		return NULL;
+	}
 
 	if(bytes < MIN_REQ_SIZE) {
 		bytes = MIN_REQ_SIZE;
@@ -119,23 +166,47 @@ uint32_t intlog2 (uint32_t v) {  	// 32-bit word to find the log of
 	
 	level = intLogBytes - LOG2_MIN_REQ_SIZE;
 
-	printf("Byte Request: %d\n", bytes);
-	printf("TOTAL_LEVELS: %d\n", TOTAL_LEVELS);
-	printf("level: %d\n", level);
+	printf("\n=----------------[COMPILE TIME KNOWN]----------------=\n");
+	printf("BUDDY_ARENA[BEGIN]: %p\n", (&BUDDY_ARENA[0]));
+	printf("BUDDY_ARENA[END  ]: %p\n", (&BUDDY_ARENA[NUM_OF_LEAVES_WORDS-1]));
 	printf("NUM_OF_LEAVES_WORDS:  %d\n", NUM_OF_LEAVES_WORDS);
-	printf("Starting Idx: %d\n", NUM_OF_LEAVES_WORDS - ((1 << (TOTAL_LEVELS - level))>>5) );
+	printf("LOG2_MIN_REQ_SIZE: %d\n", LOG2_MIN_REQ_SIZE);
+	printf("TOTAL_LEVELS: %d\n", TOTAL_LEVELS);
+	printf("=----------------[##################]----------------=\n");
+	printf("Byte Request: %d\n", bytes);
+	printf("level: %d\n", level);
+	printf("Starting Idx: %d\n", NUM_OF_LEAVES_WORDS - ((1 << (TOTAL_LEVELS-1 - level))>>5) );
 
-	uint32_t starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS - level))>>5);
+	uint32_t starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS-1 - level))>>5);
+
 	if(starting_idx == NUM_OF_LEAVES_WORDS) {
-		uint32_t num_of_bits = (1<< (TOTAL_LEVELS - level));
-		uint32_t bitmask = (1 << num_of_bits)-1;
-
+		uint32_t num_of_bits = (1<< (TOTAL_LEVELS - 1 - level));
+		uint32_t bitmask = (1 << num_of_bits);
 		printf("how many bits: %d\n", num_of_bits);
 		printf("bitmask: %08x\n", bitmask);
 
 		bitmap = tree[level].internal[NUM_OF_LEAVES_WORDS-1];
+		if(bitmap < bitmask) {
+			uint32_t lvl_vec 		= ~bitmap & ~(~bitmap-1);
+			uint32_t addr_idx 		= intlog2(lvl_vec);
+			printf("bitmap: %08x\n", bitmap);
+			printf("lvl_vec: %08x\n", lvl_vec);
+			printf("addr_idx: %08x\n", addr_idx);
+			tree[level].internal[NUM_OF_LEAVES_WORDS-1] = bitmap | lvl_vec;
+			update_tree(level);
+			printf("Address to return %p\n", (void *) ((uint32_t)BUDDY_ARENA + (addr_idx << (intLogBytes)) ) );
 
+			uint32_t ADDR_TAG = ((uint32_t)BUDDY_ARENA + (addr_idx << (intLogBytes)) );
+			ADDR_TAG ^= (uint32_t)BUDDY_ARENA;
+			printf("ADDR_TAG: %d\n", ADDR_TAG);
+			printf("ADDR_TAG>>LOG2_MIN_REQ_SIZE: %d\n", ADDR_TAG >> LOG2_MIN_REQ_SIZE);
+			ADDR_LUT[ADDR_TAG>>LOG2_MIN_REQ_SIZE] = level;
+
+			return (void *) (void *) ((uint32_t)BUDDY_ARENA + (addr_idx << (intLogBytes)) );
+		}
+		return NULL;
 	}
+
 
 	for(int i = starting_idx; i < NUM_OF_LEAVES_WORDS; ++i) {
 			bitmap = tree[level].internal[i];
@@ -143,18 +214,34 @@ uint32_t intlog2 (uint32_t v) {  	// 32-bit word to find the log of
 				continue;
 			}			
 			uint32_t lvl_vec 		= ~bitmap & ~(~bitmap-1);
+			uint32_t addr_idx 		= intlog2(lvl_vec);
+			printf("bitmap: %08x\n", bitmap);
+			printf("lvl_vec: %08x\n", lvl_vec);
+			printf("addr_idx: %08x\n", addr_idx);
+			printf("i: %d\n", i);
+			tree[level].internal[i] = bitmap | lvl_vec;
+			
+			update_tree(level);
+			
+			printf("Address to return %p\n", (void *) ((uint32_t)BUDDY_ARENA + ((((i-starting_idx) << 5)+addr_idx) << (intLogBytes))) );
 
-			// printf("  bitmap is %08x\n", bitmap);
-			// printf("  level  is %08x\n", level);
-			// printf("  lvlvec is %08x\n", lvl_vec);
-
-			uint32_t addr_idx_buddy = intlog2(lvl_vec); 
-			//printf("  addridx is %08x\n", addr_idx_buddy);
+			uint32_t ADDR_TAG = ((uint32_t)BUDDY_ARENA + ((((i-starting_idx) << 5)+addr_idx) << (intLogBytes)));
+			ADDR_TAG ^= (uint32_t)BUDDY_ARENA;
+			printf("ADDR_TAG: %d (%08x)\n", ADDR_TAG, ADDR_TAG);
+			printf("ADDR_TAG>>LOG2_MIN_REQ_SIZE: %d\n", ADDR_TAG >> LOG2_MIN_REQ_SIZE);			
+			if(ADDR_LUT[ADDR_TAG>>LOG2_MIN_REQ_SIZE] == 0) {
+				ADDR_LUT[ADDR_TAG>>LOG2_MIN_REQ_SIZE] = level;
+			} else {
+				printf("SEEN THESE TAG BEFORE %d\n", ADDR_TAG >> LOG2_MIN_REQ_SIZE);
+				while(1);
+			}
+			return (void *) ((uint32_t)BUDDY_ARENA + ((((i-starting_idx) << 5)+addr_idx) << (intLogBytes)));
 	}
-	printf("\n");
 	return NULL;
 	
 }
+
+
 
 #ifdef __DO_NOT_INLINE__ 
    void __attribute__ ((noinline)) bud_free(void * p)
@@ -162,6 +249,9 @@ uint32_t intlog2 (uint32_t v) {  	// 32-bit word to find the log of
    void bud_free(void * p)
 #endif
 {
+
+	uint32_t addr_map = ((uint32_t)p ^ (uint32_t)BUDDY_ARENA) >> LOG2_MIN_REQ_SIZE;
+	printf("This address[0x%08x] is from level: %d\n", (uint32_t)p, ADDR_LUT[addr_map]);
 
 }
 

@@ -6,21 +6,26 @@ int main(int argc, char * argv[]) {
 
 	/* BUD */
 	int * a;
-	int * b = (int *)bud_malloc(2048);
-	int * c = (int *)bud_malloc(4096);
-	int * d = (int *)bud_malloc(8192);
-	int * e = (int *)bud_malloc(16384);
-	int * f = (int *)bud_malloc(65536);
-	for(int i = 0; i < 2; ++i) {
-		a = (int *)bud_malloc(i);
-		printf("%p\n", a);
+	// int * b = (int *)bud_malloc(2048);
+	// printf("Address Returned: %p\n", b);
+	// int * c = (int *)bud_malloc(2048);
+	// printf("Address Returned: %p\n", c);	
+	// int * d = (int *)bud_malloc(8192);
+	// printf("Address Returned: %p\n", d);
+	// int * e = (int *)bud_malloc(16384);
+	// printf("Address Returned: %p\n", e);
+	// int * f = (int *)bud_malloc(65536);
+	// printf("Address Returned: %p\n", f);
+	for(int i = 0; i < 4; ++i) {
+		a = (int *)bud_malloc(16);
+		printf("Address Returned: %p\n", a);
 		bud_free(a);
 	}
-	bud_free(b);
-	bud_free(c);
-	bud_free(d);
-	bud_free(e);
-	bud_free(f);
+	// bud_free(b);
+	// bud_free(c);
+	// bud_free(d);
+	// bud_free(e);
+	// bud_free(f);
 
 	/* BIT */
 	// int * a;
