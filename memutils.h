@@ -11,7 +11,7 @@
 /* This makes each allocator's arena use 65536 bytes or 64 kB (Needs to be power of two) */
 #define ARENA_BYTES		65536
 /* Defines the minimum requestable size (only applies to buddy, bit and lut) (Needs to be power of two, and cannot be larger )*/
-#define MIN_REQ_SIZE 	16
+#define MIN_REQ_SIZE 	256
 #define BUDDY_SAFETY_CHECK 		ARENA_BYTES/MIN_REQ_SIZE
 
 //==------------------------------------------==//
