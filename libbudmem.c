@@ -1,59 +1,71 @@
-/*  --> using an OR-tree to indicate availability, we can then 
- *      precisely an each level of the OR-tree to locate a free
- *      node for use.
+/* 
+ * Parameterizable buddy allocator.
  */
 
-#include "legup/memutils.h"
+#include "memutils.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <math.h>
+
+#define IS_REPRESENTIBLE_IN_D_BITS(D, N)                \
+  (((unsigned long) N >= (1UL << (D - 1)) && (unsigned long) N < (1UL << D)) ? D : -1)
+
+#define BITS_TO_REPRESENT(N)                            \
+  (N == 0 ? 1 : (31                                     \
+                 + IS_REPRESENTIBLE_IN_D_BITS( 1, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS( 2, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS( 3, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS( 4, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS( 5, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS( 6, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS( 7, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS( 8, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS( 9, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(10, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(11, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(12, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(13, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(14, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(15, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(16, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(17, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(18, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(19, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(20, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(21, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(22, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(23, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(24, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(25, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(26, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(27, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(28, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(29, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(30, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(31, N)    \
+                 + IS_REPRESENTIBLE_IN_D_BITS(32, N)    \
+                 )                                      \
+   )
 
 
-/* Heap Size in bytes */
-#define HEAPWIDTH_SZ 	4
-#define MASK 			0x03
 
-static uint32_t F_ARENA[2048] 			= {0};
-static uint32_t FBMP[6]	 				= {0};
-static uint32_t addr_map[63]			= {0};
-
-const uint32_t MASKS[6] 	= {
-								0xFFFFFFFF,
-								0x0000FFFF,
-								0x000000FF,
-								0x0000000F,
-								0x00000002,
-								0x00000001  
-							};
+#define MAX_BUDDY_CHUNK 							(uint32_t)(ARENA_BYTES >> 2)				// dividing by 4 to represent 32-bit words.
+#define NUM_OF_LEAVES 								(uint32_t)(ARENA_BYTES/MIN_REQ_SIZE) 		
+#define NUM_OF_LEAVES_WORDS 						(uint32_t)(NUM_OF_LEAVES>>5)
+#define LOG2_MIN_REQ_SIZE 							(uint32_t)(BITS_TO_REPRESENT(MIN_REQ_SIZE)-1)
+#define TOTAL_LEVELS 								(uint32_t)(BITS_TO_REPRESENT(NUM_OF_LEAVES))
 
 
-const uint32_t * OFFSETS[6][32] = {
-								{
-									F_ARENA, F_ARENA +64, F_ARENA +128, F_ARENA +192, F_ARENA +256, F_ARENA +320, F_ARENA +384, 
-									F_ARENA +448, F_ARENA +512, F_ARENA +576, F_ARENA +640, F_ARENA +704, F_ARENA +768, F_ARENA +832, 
-									F_ARENA +896, F_ARENA +960, F_ARENA +1024, F_ARENA +1088, F_ARENA +1152, F_ARENA +1216, F_ARENA +1280, 
-									F_ARENA +1344, F_ARENA +1408, F_ARENA +1472, F_ARENA +1536, F_ARENA +1600, F_ARENA +1664, F_ARENA +1728, 
-									F_ARENA +1792, F_ARENA +1856, F_ARENA +1920, F_ARENA +1984
-								},
-								{
-									F_ARENA, F_ARENA +128, F_ARENA +256, F_ARENA +384, F_ARENA +512, F_ARENA +640, F_ARENA +768, 
-									F_ARENA +896, F_ARENA +1024, F_ARENA +1152, F_ARENA +1280, F_ARENA +1408, F_ARENA +1536, F_ARENA +1664, 
-									F_ARENA +1792, F_ARENA +1920	
-								},
-								{
-									F_ARENA, F_ARENA +256, F_ARENA +512, F_ARENA +768, F_ARENA +1024, F_ARENA +1280, F_ARENA +1536, F_ARENA +1792
-								},
-								{
-									F_ARENA, F_ARENA +512, F_ARENA +1024, F_ARENA + 1536
-								},
-								{
-									F_ARENA, F_ARENA+1024
-								},
-								{
-									F_ARENA
-								}
-					};
+typedef struct uintx_t {
+	uint32_t internal[NUM_OF_LEAVES_WORDS];
+} uintx_t;
+
+
+static uint32_t 	BUDDY_ARENA[MAX_BUDDY_CHUNK] 		= {0};
+static uint8_t 		ADDR_LUT[ARENA_BYTES] 				= {0};
+static uintx_t 		tree[TOTAL_LEVELS] 					= {0};
 
 
 
@@ -66,7 +78,7 @@ static const char LogTable256[256] =
     LT(7), LT(7), LT(7), LT(7), LT(7), LT(7), LT(7), LT(7)
 };
 
-uint32_t flog (uint32_t v) {  	// 32-bit word to find the log of
+uint32_t intlog2 (uint32_t v) {  	// 32-bit word to find the log of
 	uint32_t r;     // r will be lg(v)
 	uint32_t t, tt; // temporaries
 	tt = v >> 16;
@@ -82,181 +94,281 @@ uint32_t flog (uint32_t v) {  	// 32-bit word to find the log of
 	return r;
 }
 
-void update_fbmp() {
-	FBMP[1] |= (((FBMP[0] & 0x80000000) | (FBMP[0] & 0x40000000)) << 15 | 
-				((FBMP[0] & 0x20000000) | (FBMP[0] & 0x10000000)) << 14 | 
 
-				((FBMP[0] & 0x08000000) | (FBMP[0] & 0x04000000)) << 13 |
-				((FBMP[0] & 0x02000000) | (FBMP[0] & 0x01000000)) << 12 |
 
-				((FBMP[0] & 0x00800000) | (FBMP[0] & 0x00400000)) << 11 |
-				((FBMP[0] & 0x00200000) | (FBMP[0] & 0x00100000)) << 10 |
+void update_tree(int level) {
+	uint32_t starting_idx, next_idx;
+	uint32_t bitmap;
+	// Mark Up
+	printf("\n++++++++++++++++ BITMAP UPDATE ++++++++++++++++\n");
 
-				((FBMP[0] & 0x00080000) | (FBMP[0] & 0x00040000)) <<  9 |
-				((FBMP[0] & 0x00020000) | (FBMP[0] & 0x00010000)) <<  8 |
+	printf("Marking Up\n");
+	for(int i = level; i < TOTAL_LEVELS ; i++) {
+		starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS - 1 - i)) >> 5);
+		printf("level: %d\n", i);
+		printf("starting_idx: %d\n", starting_idx);
 
-				((FBMP[0] & 0x00008000) | (FBMP[0] & 0x00004000)) <<  7 |
-				((FBMP[0] & 0x00002000) | (FBMP[0] & 0x00001000)) <<  6 |
+		if(starting_idx >= NUM_OF_LEAVES_WORDS) {
+			uint32_t tmp = 0;
+			for(int k = 0; k < 32; k += 2 ) {
+				uint32_t res1 = (tree[i-1].internal[NUM_OF_LEAVES_WORDS-1] >> k)&0x1;
+				uint32_t res2 = (tree[i-1].internal[NUM_OF_LEAVES_WORDS-1] >> (k+1))&0x1;
+				tmp |= (res1 | res2) << (k>>1);
+			}
+			tree[i].internal[NUM_OF_LEAVES_WORDS-1] = tmp;	
+				
+		} else {
+			next_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS - 2 - i)) >> 5);
+			printf("next_idx:     %d\n", next_idx);
+		}
 
-				((FBMP[0] & 0x00000800) | (FBMP[0] & 0x00000400)) <<  5 |
-				((FBMP[0] & 0x00000200) | (FBMP[0] & 0x00000100)) <<  4 |
 
-				((FBMP[0] & 0x00000080) | (FBMP[0] & 0x00000040)) <<  3 |
-				((FBMP[0] & 0x00000020) | (FBMP[0] & 0x00000010)) <<  2 |
+		for(int j = starting_idx; j < NUM_OF_LEAVES_WORDS; j+=2) {
+			uint32_t tmp = 0;
+			for(int k = 0; k < 32; k += 2 ) {
+				uint32_t res1 = (tree[i].internal[j+1] >> k)&0x1;
+				uint32_t res2 = (tree[i].internal[j+1] >> (k+1))&0x1;
+				tmp |= (res1 | res2) << (k>>1);
+			}
+			
+			tmp <<= 16;
 
-				((FBMP[0] & 0x00000008) | (FBMP[0] & 0x00000004)) <<  1 |
-				((FBMP[0] & 0x00000002) | (FBMP[0] & 0x00000001)) );
+			for(int k = 0; k < 32; k += 2 ) {
+				uint32_t res1 = (tree[i].internal[j] >> k)&0x1;
+				uint32_t res2 = (tree[i].internal[j] >> (k+1))&0x1;
+				tmp |= (res1 | res2) << (k>>1);
+			}			
+			
+			tree[i+1].internal[next_idx] = tmp;	
+			++next_idx;		
+		}
+	}
 
-	FBMP[2] |= (((FBMP[1] & 0x00008000) | (FBMP[1] & 0x00004000)) <<  7 |
-				((FBMP[1] & 0x00002000) | (FBMP[1] & 0x00001000)) <<  6 |
+	// Mark Down
+	printf("------------------\n");
+	for(int i = level; i > 0; i--) {
+		printf("marking down.\n");
 
-				((FBMP[1] & 0x00000800) | (FBMP[1] & 0x00000400)) <<  5 |
-				((FBMP[1] & 0x00000200) | (FBMP[1] & 0x00000100)) <<  4 |
+		// starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS - 1 - i))>>5);
+		starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS - 1 - i))>>5);
+		printf("level: %d\n", i);
+		printf("starting_idx: %d\n", starting_idx);		
+		if(starting_idx >= NUM_OF_LEAVES_WORDS) {
+			for(int k = 0; k < 16; k+=1) {
+				uint32_t res = (tree[i].internal[NUM_OF_LEAVES_WORDS-1] >> k)&0x1;
+				uint32_t bitidx1 = k << 1;
+				uint32_t bitidx2 = 1+(k << 1);
+				tree[i-1].internal[NUM_OF_LEAVES_WORDS-1] = (tree[i-1].internal[NUM_OF_LEAVES_WORDS-1] & ~(res << bitidx1)) | (res << bitidx1);
+				tree[i-1].internal[NUM_OF_LEAVES_WORDS-1] = (tree[i-1].internal[NUM_OF_LEAVES_WORDS-1] & ~(res << bitidx2)) | (res << bitidx2);
+			}				
+		} else {
+			next_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS - i)) >> 5);
+			printf("Next IDX = %d\n", next_idx);
+		}
+		for(int j = starting_idx; j < NUM_OF_LEAVES_WORDS; ++j) {
+			printf("I am here at level %d\n", i);
+			uint32_t tmp1 = ~0;
+			for(int k = 0; k < 16; ++k) {
+				uint32_t res = (tree[i].internal[j] >> k)&0x1;
+				uint32_t bitidx1 = k << 1;
+				uint32_t bitidx2 = 1+(k << 1);
+				tree[i-1].internal[next_idx] = (tree[i-1].internal[next_idx] & ~(res << bitidx1)) | (res << bitidx1);
+				tree[i-1].internal[next_idx] = (tree[i-1].internal[next_idx] & ~(res << bitidx2)) | (res << bitidx2);
+			}
+			for(int k = 16; k < 32; ++k) {
+				uint32_t res = (tree[i].internal[j] >> k)&0x1;
+				uint32_t bitidx1 = k << 1;
+				uint32_t bitidx2 = 1+(k << 1);
+				tree[i-1].internal[next_idx+1] = (tree[i-1].internal[next_idx+1] & ~(res << bitidx1)) | (res << bitidx1);
+				tree[i-1].internal[next_idx+1] = (tree[i-1].internal[next_idx+1] & ~(res << bitidx2)) | (res << bitidx2);
+			}
+			next_idx+=2;
+		}
+	}
 
-				((FBMP[1] & 0x00000080) | (FBMP[1] & 0x00000040)) <<  3 |
-				((FBMP[1] & 0x00000020) | (FBMP[1] & 0x00000010)) <<  2 |
+	// print tree
+	for(int i = 0; i < TOTAL_LEVELS; ++i) {
+		starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS-1 - i))>>5);
+		if(starting_idx >= NUM_OF_LEAVES_WORDS) {
+			printf("[%2d][0x%08x]", i,tree[i].internal[NUM_OF_LEAVES_WORDS-1]);
+		}
 
-				((FBMP[1] & 0x00000008) | (FBMP[1] & 0x00000004)) <<  1 |
-				((FBMP[1] & 0x00000002) | (FBMP[1] & 0x00000001)) );
+		for(int j = starting_idx; j < NUM_OF_LEAVES_WORDS; ++j) {
+			printf("[%2d][0x%08x] ",i, tree[i].internal[j]);
+		}		
+		printf("\n");	
+	}
+	printf("\n++++++++++++++++ ============= ++++++++++++++++\n");
 
-	FBMP[3] |= (((FBMP[2] & 0x00000080) | (FBMP[2] & 0x00000040)) <<  3 |
-				((FBMP[2] & 0x00000020) | (FBMP[2] & 0x00000010)) <<  2 |
-				((FBMP[2] & 0x00000008) | (FBMP[2] & 0x00000004)) <<  1 |
-				((FBMP[2] & 0x00000002) | (FBMP[2] & 0x00000001)) );
-
-	FBMP[4] |= (((FBMP[3] & 0x00000008) | (FBMP[3] & 0x00000004)) <<  1 |
-				((FBMP[3] & 0x00000002) | (FBMP[3] & 0x00000001)) );
-
-	FBMP[5] |= (((FBMP[4] & 0x00000002) | (FBMP[4] & 0x00000001)) );		
 }
 
-
 #ifdef __DO_NOT_INLINE__ 
-   void * __attribute__ ((noinline)) fmalloc(unsigned bytes)
+   void * __attribute__ ((noinline)) bud_malloc(unsigned bytes)
 #else
-   void * fmalloc(unsigned bytes)
+   void * bud_malloc(unsigned bytes)
 #endif
 
 {
 
-	//printf("  bytes = %d\n", bytes);
-	printbytes(1, 1, bytes);
+	uint32_t intLogBytes;
+	uint32_t level;
+	uint32_t bitmap;
 
-	if(bytes < 256) {
-		bytes = 256;
-	}	
-	//printf("  bytes = %d\n", bytes);
+	if(bytes > ARENA_BYTES) {
+		printf("Size too large for arena depth.\n");
+		return NULL;
+	}
 
-	uint32_t flogbytes = flog(bytes);
+	if(bytes < MIN_REQ_SIZE) {
+		bytes = MIN_REQ_SIZE;
+	}
 
-	//printf("  flogbytes = %d\n", flogbytes);
+	intLogBytes = intlog2(bytes);
 
-	if((bytes - (1<<flogbytes)) > 0) {
-		flogbytes+=1;
+	if((bytes - (1<<intLogBytes)) > 0) {
+		intLogBytes+=1;
 	}
 	
-	printbytes(1, 2, 1<<flogbytes);
+	level = intLogBytes - LOG2_MIN_REQ_SIZE;
 
+	printf("\n=----------------[COMPILE TIME KNOWN]----------------=\n");
+	printf("BUDDY_ARENA[BEGIN]: %p\n", (&BUDDY_ARENA[0]));
+	printf("BUDDY_ARENA[END  ]: %p\n", (&BUDDY_ARENA[NUM_OF_LEAVES_WORDS-1]));
+	printf("NUM_OF_LEAVES_WORDS:  %d\n", NUM_OF_LEAVES_WORDS);
+	printf("LOG2_MIN_REQ_SIZE: %d\n", LOG2_MIN_REQ_SIZE);
+	printf("TOTAL_LEVELS: %d\n", TOTAL_LEVELS);
+	printf("=----------------[##################]----------------=\n");
+	printf("Byte Request: %d\n", bytes);
+	printf("level: %d\n", level);
+	printf("Starting Idx: %d\n", NUM_OF_LEAVES_WORDS - ((1 << (TOTAL_LEVELS-1 - level))>>5) );
 
-	//printf("  bytes = %d\n", bytes);
+	uint32_t starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS-1 - level))>>5);
 
-		uint8_t level = flogbytes-8;
-		uint32_t bitmap = FBMP[level];
-		
-		if(bitmap != MASKS[level]) {
+	if(starting_idx == NUM_OF_LEAVES_WORDS) {
+		uint32_t num_of_bits = (1<< (TOTAL_LEVELS - 1 - level));
+		uint32_t bitmask = (1 << num_of_bits);
+		printf("how many bits: %d\n", num_of_bits);
+		printf("bitmask: %08x\n", bitmask);
+
+		bitmap = tree[level].internal[NUM_OF_LEAVES_WORDS-1];
+		if(bitmap < bitmask) {
 			uint32_t lvl_vec 		= ~bitmap & ~(~bitmap-1);
-			//printf("  bitmap is %08x\n", bitmap);
-			//printf("  level  is %08x\n", level);
-			//printf("  lvlvec is %08x\n", lvl_vec);
+			uint32_t addr_idx 		= intlog2(lvl_vec);
+			printf("bitmap: %08x\n", bitmap);
+			printf("lvl_vec: %08x\n", lvl_vec);
+			printf("addr_idx: %08x\n", addr_idx);
+			tree[level].internal[NUM_OF_LEAVES_WORDS-1] = bitmap | lvl_vec;
+			update_tree(level);
+			printf("Address to return %p\n", (void *) ((uint32_t)BUDDY_ARENA + (addr_idx << (intLogBytes)) ) );
 
-			uint32_t addr_idx_buddy = flog(lvl_vec); 
-			//printf("  addridx is %08x\n", addr_idx_buddy);
+			uint32_t ADDR_TAG = ((uint32_t)BUDDY_ARENA + (addr_idx << (intLogBytes)) );
+			ADDR_TAG ^= (uint32_t)BUDDY_ARENA;
+			printf("ADDR_TAG: %d\n", ADDR_TAG);
+			printf("ADDR_TAG>>LOG2_MIN_REQ_SIZE: %d\n", ADDR_TAG >> LOG2_MIN_REQ_SIZE);
+			ADDR_LUT[ADDR_TAG>>LOG2_MIN_REQ_SIZE] = level;
 
-			FBMP[level] 				= bitmap | lvl_vec;
-			//printf("  FBMP[level] is %08x\n", FBMP[level]);
-
-			update_fbmp();
-
-
-			addr_map[(uint32_t)OFFSETS[level][addr_idx_buddy]] = level;
-
-			printbytes(1, 0, (uint32_t)OFFSETS[level][addr_idx_buddy]);
-
-			return (void *)OFFSETS[level][addr_idx_buddy];
+			return (void *) (void *) ((uint32_t)BUDDY_ARENA + (addr_idx << (intLogBytes)) );
 		}
-	
-	
+		return NULL;
+	}
 
+
+	for(int i = starting_idx; i < NUM_OF_LEAVES_WORDS; ++i) {
+			bitmap = tree[level].internal[i];
+			if(~bitmap == 0) {
+				continue;
+			}			
+			uint32_t lvl_vec 		= ~bitmap & ~(~bitmap-1);
+			uint32_t addr_idx 		= intlog2(lvl_vec);
+			printf("bitmap: %08x\n", bitmap);
+			printf("lvl_vec: %08x\n", lvl_vec);
+			printf("addr_idx: %08x\n", addr_idx);
+			printf("i: %d\n", i);
+			tree[level].internal[i] = bitmap | lvl_vec;
+			
+			update_tree(level);
+			
+			printf("Address to return %p\n", (void *) ((uint32_t)BUDDY_ARENA + ((((i-starting_idx) << 5)+addr_idx) << (intLogBytes))) );
+
+			uint32_t ADDR_TAG = ((uint32_t)BUDDY_ARENA + ((((i-starting_idx) << 5)+addr_idx) << (intLogBytes)));
+			ADDR_TAG ^= (uint32_t)BUDDY_ARENA;
+			printf("ADDR_TAG: %d (%08x)\n", ADDR_TAG, ADDR_TAG);
+			printf("ADDR_TAG>>LOG2_MIN_REQ_SIZE: %d\n", ADDR_TAG >> LOG2_MIN_REQ_SIZE);			
+			if(ADDR_LUT[ADDR_TAG>>LOG2_MIN_REQ_SIZE] == 0) {
+				ADDR_LUT[ADDR_TAG>>LOG2_MIN_REQ_SIZE] = level;
+			} else {
+				printf("SEEN THESE TAG BEFORE %d\n", ADDR_TAG >> LOG2_MIN_REQ_SIZE);
+				while(1);
+			}
+			return (void *) ((uint32_t)BUDDY_ARENA + ((((i-starting_idx) << 5)+addr_idx) << (intLogBytes)));
+	}
 	return NULL;
 	
 }
 
+
+
 #ifdef __DO_NOT_INLINE__ 
-   void __attribute__ ((noinline)) ffree(void * p)
+   void __attribute__ ((noinline)) bud_free(void * p)
 #else
-   void ffree(void * p)
+   void bud_free(void * p)
 #endif
-	
- {
-	printbytes(0, 1, (uint32_t)p);
-	uint32_t addr = (uint32_t)p;
-	uint32_t level = addr_map[addr];	
+{
 
-	//printf("%08x --> addr\n", addr);
+	uint32_t addr_map = ((uint32_t)p ^ (uint32_t)BUDDY_ARENA) >> LOG2_MIN_REQ_SIZE;
+	uint32_t level = ADDR_LUT[addr_map];
+	uint32_t intLogBytes = level + LOG2_MIN_REQ_SIZE;
+	uint32_t starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS-1 - level))>>5);
 
-	for(int j = (1<<(5-level)); j >= 0; --j) {
-		if(addr == (uint32_t)OFFSETS[level][j]) {
-			uint32_t msk = 1 << j;
-			if((FBMP[level] & msk) == 1) {
-				FBMP[level] &= ~(msk);
-				update_fbmp();
-				return;
-			}
-		}
-	}
+	printf("This address[0x%08x] is from level: %d\n", (uint32_t)p, ADDR_LUT[addr_map]);
+
+	uint32_t res = ((uint32_t)p - ((uint32_t)BUDDY_ARENA + (((starting_idx) << 5) << intLogBytes))) >> intLogBytes;
+	uint32_t res2 = (res >> 5)<<5;
+	printf("res is %08x\n", res);
+	printf("res2 is %08x\n", res2);
+	tree[level].internal[starting_idx+(res-res2)] &= ~(1<<res2);
+	update_tree(level);
 }
 
 
-void * frealloc(void * vp, unsigned newbytes) {
+void * bud_realloc(void * vp, unsigned newbytes) {
 	void *newp = NULL;
 	uint32_t *cnewp, *cvp;
 
 	int idx = 0;
 	/* behavior on corner cases conforms to SUSv2 */
 	if (vp == NULL)
-		return fmalloc(newbytes);
+		return bud_malloc(newbytes);
 
 	if (newbytes != 0) {
-		if ( (newp = fmalloc(newbytes)) == NULL)
+		if ( (newp = bud_malloc(newbytes)) == NULL)
 			return NULL;
-		
-		uint32_t addr = (uint32_t)vp;
-		uint32_t level = addr_map[addr]+8;
-		
-		uint32_t bound = ((1 << level) < newbytes) ? (1<<level) : newbytes;
-		
-		bound >>= 2;
+
+		uint32_t addr_map = ((uint32_t)vp ^ (uint32_t)BUDDY_ARENA) >> LOG2_MIN_REQ_SIZE;
+		uint32_t level = ADDR_LUT[addr_map];
+		uint32_t intLogBytes = level + LOG2_MIN_REQ_SIZE;
+		uint32_t w0rds = (1 << intLogBytes)>>2; 
 
 		cnewp   = newp;
 		cvp     = vp;
 
-		for(idx = 0; idx < bound; ++ idx) {
+		for(idx = 0; idx < w0rds; ++ idx) {
 			cnewp[idx]=cvp[idx];
 		}
 	}
 
-	ffree(vp);
+	bud_free(vp);
 	return newp;
 } 
 
-void * fcalloc(unsigned nelem, unsigned elsize) {
+void * bud_calloc(unsigned nelem, unsigned elsize) {
   void *vp;
   unsigned nbytes;
   uint32_t * cvp;
   unsigned int i = 0;
 
   nbytes = (nelem * elsize)>>2;
-  if ( (vp = fmalloc(nbytes)) == NULL)
+  if ( (vp = bud_malloc(nbytes)) == NULL)
     return NULL;
 
   cvp = (uint32_t *)vp;
