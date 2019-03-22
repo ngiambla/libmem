@@ -1,8 +1,8 @@
-/* NEA -> Nick's Efficient Allocator
+/* 
  * 
  */
 
-#include "legup/memutils.h"
+#include "memutils.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
