@@ -125,7 +125,7 @@ void update_tree(int level) {
 				uint32_t res2 = (tree[i-1].internal[NUM_OF_LEAVES_WORDS-1] >> (k+1))&0x1;
 				tmp |= (res1 | res2) << (k>>1);
 			}
-			tree[i].internal[NUM_OF_LEAVES_WORDS-1] |= tmp;	
+			tree[i].internal[NUM_OF_LEAVES_WORDS-1] = tmp;	
 				
 		} else {
 			next_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS - 2 - i)) >> 5);
@@ -149,7 +149,7 @@ void update_tree(int level) {
 				tmp |= (res1 | res2) << (k>>1);
 			}			
 			
-			tree[i+1].internal[next_idx] |= tmp;	
+			tree[i+1].internal[next_idx] = tmp;	
 			++next_idx;		
 		}
 	}
@@ -328,19 +328,16 @@ void update_tree(int level) {
 	uint32_t addr_map = ((uint32_t)p ^ (uint32_t)BUDDY_ARENA) >> LOG2_MIN_REQ_SIZE;
 	uint32_t level = ADDR_LUT[addr_map];
 	uint32_t intLogBytes = level + LOG2_MIN_REQ_SIZE;
+	uint32_t starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS-1 - level))>>5);
 
 	printf("This address[0x%08x] is from level: %d\n", (uint32_t)p, ADDR_LUT[addr_map]);
 
-	uint32_t starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS-1 - level))>>5);
-
-	uint32_t res = ((uint32_t)p - (uint32_t)BUDDY_ARENA) >> (intLogBytes);
-	printf("res: %08x\n", res);
-
-	printf("Address to return %p\n", (void *) (((i-starting_idx) << 5)+addr_idx) );
-
-	
-
-
+	uint32_t res = ((uint32_t)p - ((uint32_t)BUDDY_ARENA + (((starting_idx) << 5) << intLogBytes))) >> intLogBytes;
+	uint32_t res2 = (res >> 5)<<5;
+	printf("res is %08x\n", res);
+	printf("res2 is %08x\n", res2);
+	tree[level].internal[starting_idx+(res-res2)] &= ~(1<<res2);
+	update_tree(level);
 }
 
 
