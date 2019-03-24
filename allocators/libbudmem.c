@@ -96,17 +96,17 @@ uint32_t intlog2 (uint32_t v) {  	// 32-bit word to find the log of
 
 
 
-void update_tree(int level) {
+void __attribute__ ((always_inline)) update_tree(int level) {
 	uint32_t starting_idx, next_idx;
 	uint32_t bitmap;
 	// Mark Up
-	printf("\n++++++++++++++++ BITMAP UPDATE ++++++++++++++++\n");
+	// printf("\n++++++++++++++++ BITMAP UPDATE ++++++++++++++++\n");
 
-	printf("Marking Up\n");
+	// printf("Marking Up\n");
 	for(int i = level; i < TOTAL_LEVELS ; i++) {
 		starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS - 1 - i)) >> 5);
-		printf("level: %d\n", i);
-		printf("starting_idx: %d\n", starting_idx);
+		// printf("level: %d\n", i);
+		// printf("starting_idx: %d\n", starting_idx);
 
 		if(starting_idx >= NUM_OF_LEAVES_WORDS) {
 			uint32_t tmp = 0;
@@ -119,7 +119,7 @@ void update_tree(int level) {
 				
 		} else {
 			next_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS - 2 - i)) >> 5);
-			printf("next_idx:     %d\n", next_idx);
+			// printf("next_idx:     %d\n", next_idx);
 		}
 
 
@@ -145,14 +145,14 @@ void update_tree(int level) {
 	}
 
 	// Mark Down
-	printf("------------------\n");
+	// printf("------------------\n");
 	for(int i = level; i > 0; i--) {
-		printf("marking down.\n");
+		// printf("marking down.\n");
 
 		// starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS - 1 - i))>>5);
 		starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS - 1 - i))>>5);
-		printf("level: %d\n", i);
-		printf("starting_idx: %d\n", starting_idx);		
+		// printf("level: %d\n", i);
+		// printf("starting_idx: %d\n", starting_idx);		
 		if(starting_idx >= NUM_OF_LEAVES_WORDS) {
 			for(int k = 0; k < 16; k+=1) {
 				uint32_t res = (tree[i].internal[NUM_OF_LEAVES_WORDS-1] >> k)&0x1;
@@ -163,10 +163,10 @@ void update_tree(int level) {
 			}				
 		} else {
 			next_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS - i)) >> 5);
-			printf("Next IDX = %d\n", next_idx);
+			// printf("Next IDX = %d\n", next_idx);
 		}
 		for(int j = starting_idx; j < NUM_OF_LEAVES_WORDS; ++j) {
-			printf("I am here at level %d\n", i);
+			// printf("I am here at level %d\n", i);
 			uint32_t tmp1 = ~0;
 			for(int k = 0; k < 16; ++k) {
 				uint32_t res = (tree[i].internal[j] >> k)&0x1;
@@ -185,21 +185,6 @@ void update_tree(int level) {
 			next_idx+=2;
 		}
 	}
-
-	// print tree
-	for(int i = 0; i < TOTAL_LEVELS; ++i) {
-		starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS-1 - i))>>5);
-		if(starting_idx >= NUM_OF_LEAVES_WORDS) {
-			printf("[%2d][0x%08x]", i,tree[i].internal[NUM_OF_LEAVES_WORDS-1]);
-		}
-
-		for(int j = starting_idx; j < NUM_OF_LEAVES_WORDS; ++j) {
-			printf("[%2d][0x%08x] ",i, tree[i].internal[j]);
-		}		
-		printf("\n");	
-	}
-	printf("\n++++++++++++++++ ============= ++++++++++++++++\n");
-
 }
 
 #ifdef __DO_NOT_INLINE__ 
@@ -215,7 +200,6 @@ void update_tree(int level) {
 	uint32_t bitmap;
 
 	if(bytes > ARENA_BYTES) {
-		printf("Size too large for arena depth.\n");
 		return NULL;
 	}
 
@@ -230,46 +214,23 @@ void update_tree(int level) {
 	}
 	
 	level = intLogBytes - LOG2_MIN_REQ_SIZE;
-
-	printf("\n=----------------[COMPILE TIME KNOWN]----------------=\n");
-	printf("BUDDY_ARENA[BEGIN]: %p\n", (&BUDDY_ARENA[0]));
-	printf("BUDDY_ARENA[END  ]: %p\n", (&BUDDY_ARENA[NUM_OF_LEAVES_WORDS-1]));
-	printf("NUM_OF_LEAVES_WORDS:  %d\n", NUM_OF_LEAVES_WORDS);
-	printf("LOG2_MIN_REQ_SIZE: %d\n", LOG2_MIN_REQ_SIZE);
-	printf("TOTAL_LEVELS: %d\n", TOTAL_LEVELS);
-	printf("=----------------[##################]----------------=\n");
-	printf("Byte Request: %d\n", bytes);
-	printf("level: %d\n", level);
-	printf("Starting Idx: %d\n", NUM_OF_LEAVES_WORDS - ((1 << (TOTAL_LEVELS-1 - level))>>5) );
-
 	uint32_t starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS-1 - level))>>5);
 
 	if(starting_idx == NUM_OF_LEAVES_WORDS) {
 		uint32_t num_of_bits = (1<< (TOTAL_LEVELS - 1 - level));
 		uint32_t bitmask = (1 << num_of_bits);
-		printf("how many bits: %d\n", num_of_bits);
-		printf("bitmask: %08x\n", bitmask);
 
 		bitmap = tree[level].internal[NUM_OF_LEAVES_WORDS-1];
 		if(bitmap < bitmask) {
 			uint32_t lvl_vec 		= ~bitmap & ~(~bitmap-1);
 			uint32_t addr_idx 		= intlog2(lvl_vec);
-			printf("bitmap: %08x\n", bitmap);
-			printf("lvl_vec: %08x\n", lvl_vec);
-			printf("addr_idx: %08x\n", addr_idx);
 			tree[level].internal[NUM_OF_LEAVES_WORDS-1] = bitmap | lvl_vec;
 			update_tree(level);
-			printf("Address to return %p\n", (void *) ((uint32_t)BUDDY_ARENA + (addr_idx << (intLogBytes)) ) );
-
 			uint32_t ADDR_TAG = ((uint32_t)BUDDY_ARENA + (addr_idx << (intLogBytes)) );
 			ADDR_TAG ^= (uint32_t)BUDDY_ARENA;
-			printf("ADDR_TAG: %d\n", ADDR_TAG);
-			printf("ADDR_TAG>>LOG2_MIN_REQ_SIZE: %d\n", ADDR_TAG >> LOG2_MIN_REQ_SIZE);
 			ADDR_LUT[ADDR_TAG>>LOG2_MIN_REQ_SIZE] = level;
-
 			return (void *) (BUDDY_ARENA + (addr_idx << (intLogBytes)) );
 		}
-		return NULL;
 	}
 
 
@@ -280,26 +241,13 @@ void update_tree(int level) {
 			}			
 			uint32_t lvl_vec 		= ~bitmap & ~(~bitmap-1);
 			uint32_t addr_idx 		= intlog2(lvl_vec);
-			printf("bitmap: %08x\n", bitmap);
-			printf("lvl_vec: %08x\n", lvl_vec);
-			printf("addr_idx: %08x\n", addr_idx);
-			printf("i: %d\n", i);
+
 			tree[level].internal[i] = bitmap | lvl_vec;
 			
 			update_tree(level);
-			
-			printf("Address to return %p\n", (void *) ((uint32_t)BUDDY_ARENA + ((((i-starting_idx) << 5)+addr_idx) << (intLogBytes))) );
-
 			uint32_t ADDR_TAG = ((uint32_t)BUDDY_ARENA + ((((i-starting_idx) << 5)+addr_idx) << (intLogBytes)));
-			ADDR_TAG ^= (uint32_t)BUDDY_ARENA;
-			printf("ADDR_TAG: %d (%08x)\n", ADDR_TAG, ADDR_TAG);
-			printf("ADDR_TAG>>LOG2_MIN_REQ_SIZE: %d\n", ADDR_TAG >> LOG2_MIN_REQ_SIZE);			
-			if(ADDR_LUT[ADDR_TAG>>LOG2_MIN_REQ_SIZE] == 0) {
-				ADDR_LUT[ADDR_TAG>>LOG2_MIN_REQ_SIZE] = level;
-			} else {
-				printf("SEEN THESE TAG BEFORE %d\n", ADDR_TAG >> LOG2_MIN_REQ_SIZE);
-				while(1);
-			}
+			ADDR_TAG ^= (uint32_t)BUDDY_ARENA;			
+			ADDR_LUT[ADDR_TAG>>LOG2_MIN_REQ_SIZE] = level;
 			return (void *) (BUDDY_ARENA + ((((i-starting_idx) << 5)+addr_idx) << (intLogBytes)));
 	}
 	return NULL;
@@ -319,13 +267,8 @@ void update_tree(int level) {
 	uint32_t level = ADDR_LUT[addr_map];
 	uint32_t intLogBytes = level + LOG2_MIN_REQ_SIZE;
 	uint32_t starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS-1 - level))>>5);
-
-	printf("This address[0x%08x] is from level: %d\n", (uint32_t)p, ADDR_LUT[addr_map]);
-
 	uint32_t res = ((uint32_t)p - ((uint32_t)BUDDY_ARENA + (((starting_idx) << 5) << intLogBytes))) >> intLogBytes;
 	uint32_t res2 = (res >> 5)<<5;
-	printf("res is %08x\n", res);
-	printf("res2 is %08x\n", res2);
 	tree[level].internal[starting_idx+(res-res2)] &= ~(1<<res2);
 	update_tree(level);
 }
