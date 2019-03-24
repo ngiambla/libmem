@@ -6,8 +6,8 @@ int main(int argc, char * argv[]) {
 
 	/* BUD */
 	int * a;
-	// int * b = (int *)bud_malloc(2048);
-	// printf("Address Returned: %p\n", b);
+	int * b = (int *)lut_malloc(16);
+	printf("Address Returned: %p\n", b);
 	// int * c = (int *)bud_malloc(2048);
 	// printf("Address Returned: %p\n", c);	
 	// int * d = (int *)bud_malloc(8192);
@@ -17,10 +17,12 @@ int main(int argc, char * argv[]) {
 	// int * f = (int *)bud_malloc(65536);
 	// printf("Address Returned: %p\n", f);
 	for(int i = 0; i < 33; ++i) {
-		a = (int *)bud_malloc(16);
+		a = (int *)lut_malloc(16);
 		printf("Address Returned: %p\n", a);
-		//bud_free(a);
+		// lut_free(a);
 	}
+	lut_free(a);
+
 	// bud_free(b);
 	// bud_free(c);
 	// bud_free(d);

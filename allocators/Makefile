@@ -4,7 +4,7 @@
 EXE = ut
 CXX = gcc
 
-_OBJS = unittests.o libgnumem.o libbitmem.o libbudmem2.o memutils.o
+_OBJS = unittests.o libgnumem.o libbitmem.o libbudmem.o liblutmem.o memutils.o
 OBJS = $(patsubst %,%,$(_OBJS))
 CFLAGS += -m32
 

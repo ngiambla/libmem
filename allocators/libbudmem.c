@@ -267,7 +267,7 @@ void update_tree(int level) {
 			printf("ADDR_TAG>>LOG2_MIN_REQ_SIZE: %d\n", ADDR_TAG >> LOG2_MIN_REQ_SIZE);
 			ADDR_LUT[ADDR_TAG>>LOG2_MIN_REQ_SIZE] = level;
 
-			return (void *) (void *) ((uint32_t)BUDDY_ARENA + (addr_idx << (intLogBytes)) );
+			return (void *) (BUDDY_ARENA + (addr_idx << (intLogBytes)) );
 		}
 		return NULL;
 	}
@@ -300,7 +300,7 @@ void update_tree(int level) {
 				printf("SEEN THESE TAG BEFORE %d\n", ADDR_TAG >> LOG2_MIN_REQ_SIZE);
 				while(1);
 			}
-			return (void *) ((uint32_t)BUDDY_ARENA + ((((i-starting_idx) << 5)+addr_idx) << (intLogBytes)));
+			return (void *) (BUDDY_ARENA + ((((i-starting_idx) << 5)+addr_idx) << (intLogBytes)));
 	}
 	return NULL;
 	
