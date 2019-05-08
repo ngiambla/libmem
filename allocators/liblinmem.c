@@ -1,11 +1,22 @@
- /*
-  * Trivial linear allocator implementation
- */
-#include "memutils.h"
+//===-- liblinmem.c -------------------------------------------*- C -*--------===//
+//
+// This file implements a linear allocator (which simply bumps) a pointer to an
+// an address in the arena per incoming request.
+//
+// Written By: Nicholas V. Giamblanco
+//===-------------------------------------------------------------------------===//
+
+// std-C Libs.
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <pthread.h>
+
+// user-includes. 
+#include "memutils.h"
+
+pthread_mutex_t lock; 
 
 typedef uint32_t LCHUNK;
 typedef uint32_t HEAPWIDTH;
@@ -22,7 +33,7 @@ static LCHUNK * PREV_ADDR 	= larena;
 static LCHUNK * END 		= &larena[LARENA_CHUNKS-1];
 
 
-void * __attribute__ ((noinline)) lmalloc(unsigned nbytes) {
+void * __attribute__ ((noinline)) lin_malloc(unsigned nbytes) {
 	uint32_t size = nbytes;
 	uint32_t newsize=0;
 	printbytes(1, 1, size);
@@ -48,9 +59,10 @@ void * __attribute__ ((noinline)) lmalloc(unsigned nbytes) {
 		printf(" Out of bounds...\n");
 		return NULL;
 	}
-
+    pthread_mutex_lock(&lock); //locking.
 	PREV_ADDR = CURR_ADDR;
 	CURR_ADDR += newsize;
+    pthread_mutex_unlock(&lock); //locking.	
 	
 	printbytes(1, 0, (uint32_t)GETADDR(PREV_ADDR));		
 
@@ -60,11 +72,11 @@ void * __attribute__ ((noinline)) lmalloc(unsigned nbytes) {
 }
 
 
-void * __attribute__ ((noinline)) lrealloc(void * p, unsigned newsize) {
+void * __attribute__ ((noinline)) lin_realloc(void * p, unsigned newsize) {
 	newsize = (newsize <= 0) ? HEAPWIDTH_SZ : newsize;
 		
 	if(!p) {
-		return lmalloc(newsize);
+		return lin_malloc(newsize);
 	}
 
 	int size = ((newsize&MASK) == 0) ? newsize : ((newsize&(~MASK))+HEAPWIDTH_SZ);;
@@ -77,14 +89,14 @@ void * __attribute__ ((noinline)) lrealloc(void * p, unsigned newsize) {
 }
 
 
-void * __attribute__ ((noinline)) lcalloc(unsigned nelem, unsigned elsize) {
+void * __attribute__ ((noinline)) lin_calloc(unsigned nelem, unsigned elsize) {
   void *vp;
   unsigned nbytes;
   unsigned char * cvp;
   unsigned int i = 0;
 
   nbytes = nelem * elsize;
-  if ( (vp = lmalloc(nbytes)) == NULL)
+  if ( (vp = lin_malloc(nbytes)) == NULL)
     return NULL;
   cvp = (unsigned char *)vp;
   for(i=0; i< nbytes; ++i) {
@@ -93,11 +105,11 @@ void * __attribute__ ((noinline)) lcalloc(unsigned nelem, unsigned elsize) {
   return vp;
 }
 
-void lfree(void * p) {
+void lin_free(void * p) {
 }
 
 
-void lfreeall()  {
+void lin_freeall()  {
 	CURR_ADDR = larena;
 	PREV_ADDR = larena;
 }

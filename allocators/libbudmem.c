@@ -1,6 +1,11 @@
-/* 
- * Parameterizable buddy allocator.
- */
+//===-- libbitmem.c -------------------------------------------*- C -*--------===//
+//
+// This program outlines the operation and logic for a binary buddy-based allocator.
+// The binary buddy allocator employs a binary tree where each node is a bit.
+// This is parameterizable on arena size and depth.
+//
+// Written By: Nicholas V. Giamblanco
+//===-------------------------------------------------------------------------===//
 
 #include "memutils.h"
 #include <stdio.h>
@@ -95,19 +100,15 @@ uint32_t intlog2 (uint32_t v) {  	// 32-bit word to find the log of
 }
 
 
-
+// Updating Tree structure of any frees or allocs.
 void __attribute__ ((always_inline)) update_tree(int level) {
 	uint32_t starting_idx, next_idx;
 	uint32_t bitmap;
 	// Mark Up
 	// printf("\n++++++++++++++++ BITMAP UPDATE ++++++++++++++++\n");
 
-	// printf("Marking Up\n");
 	for(int i = level; i < TOTAL_LEVELS ; i++) {
 		starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS - 1 - i)) >> 5);
-		// printf("level: %d\n", i);
-		// printf("starting_idx: %d\n", starting_idx);
-
 		if(starting_idx >= NUM_OF_LEAVES_WORDS) {
 			uint32_t tmp = 0;
 			for(int k = 0; k < 32; k += 2 ) {
@@ -119,7 +120,6 @@ void __attribute__ ((always_inline)) update_tree(int level) {
 				
 		} else {
 			next_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS - 2 - i)) >> 5);
-			// printf("next_idx:     %d\n", next_idx);
 		}
 
 
@@ -145,14 +145,8 @@ void __attribute__ ((always_inline)) update_tree(int level) {
 	}
 
 	// Mark Down
-	// printf("------------------\n");
 	for(int i = level; i > 0; i--) {
-		// printf("marking down.\n");
-
-		// starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS - 1 - i))>>5);
 		starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS - 1 - i))>>5);
-		// printf("level: %d\n", i);
-		// printf("starting_idx: %d\n", starting_idx);		
 		if(starting_idx >= NUM_OF_LEAVES_WORDS) {
 			for(int k = 0; k < 16; k+=1) {
 				uint32_t res = (tree[i].internal[NUM_OF_LEAVES_WORDS-1] >> k)&0x1;
@@ -163,10 +157,8 @@ void __attribute__ ((always_inline)) update_tree(int level) {
 			}				
 		} else {
 			next_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS - i)) >> 5);
-			// printf("Next IDX = %d\n", next_idx);
 		}
 		for(int j = starting_idx; j < NUM_OF_LEAVES_WORDS; ++j) {
-			// printf("I am here at level %d\n", i);
 			uint32_t tmp1 = ~0;
 			for(int k = 0; k < 16; ++k) {
 				uint32_t res = (tree[i].internal[j] >> k)&0x1;
@@ -207,15 +199,19 @@ void __attribute__ ((always_inline)) update_tree(int level) {
 		bytes = MIN_REQ_SIZE;
 	}
 
+
+	// Find which level of the tree we should look at.
 	intLogBytes = intlog2(bytes);
 
 	if((bytes - (1<<intLogBytes)) > 0) {
 		intLogBytes+=1;
 	}
 	
+
 	level = intLogBytes - LOG2_MIN_REQ_SIZE;
 	uint32_t starting_idx = NUM_OF_LEAVES_WORDS - ((1<< (TOTAL_LEVELS-1 - level))>>5);
 
+	// Begin Searching through the tree (special case: first 5 levels)
 	if(starting_idx == NUM_OF_LEAVES_WORDS) {
 		uint32_t num_of_bits = (1<< (TOTAL_LEVELS - 1 - level));
 		uint32_t bitmask = (1 << num_of_bits);
@@ -233,7 +229,7 @@ void __attribute__ ((always_inline)) update_tree(int level) {
 		}
 	}
 
-
+	// Continue search if the starting index is past 5 levels.
 	for(int i = starting_idx; i < NUM_OF_LEAVES_WORDS; ++i) {
 			bitmap = tree[level].internal[i];
 			if(~bitmap == 0) {

@@ -1,16 +1,23 @@
- /*
-  * Trivial Bitmap Allocator.
- */
+//===-- libbitmem.c -------------------------------------------*- C -*--------===//
+//
+// This program outlines the operation and logic for a bitmap-based allocator.
+// Each bit maps to a parameterizable size of bytes in an arena.
+//
+// Written By: Nicholas V. Giamblanco
+//===-------------------------------------------------------------------------===//
+
 #include "memutils.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <math.h>
 #include <stdint.h>
+#include <pthread.h>
 
 #define IS_REPRESENTIBLE_IN_D_BITS(D, N)                \
   (((unsigned long) N >= (1UL << (D - 1)) && (unsigned long) N < (1UL << D)) ? D : -1)
 
+// BITS_TO_REPRESENT(N) computes floor(log_2()) using logic.
 #define BITS_TO_REPRESENT(N)                            \
   (N == 0 ? 1 : (31                                     \
                  + IS_REPRESENTIBLE_IN_D_BITS( 1, N)    \
@@ -54,7 +61,6 @@
 #define ARENASIZE       ARENA_BYTES                   // Number of bytes available.
 #define FACTOR          MIN_REQ_SIZE                  // Each bitmap translates to 16 bytes (Must be a power of two).
 #define LT_FAC          FACTOR-1                      // Need to check for Less than Factors..
-//#define SHFTFACTOR      (int)(log(FACTOR)/log(2))     // Divisor translated into a shift amnt, to check req'd bits
 #define SHFTFACTOR      (uint32_t) (BITS_TO_REPRESENT(FACTOR)-1)    // Divisor translated into a shift amnt, to check req'd bits
 #define BLOCKS          (ARENASIZE/FACTOR)            // Blocks which
 #define BITMAP          32
@@ -92,7 +98,7 @@ static uint16_t bitsize[BLOCKS] = {0};
    // check if we need to add an extra bit for nbytes with values inbetween mod 16.
    // See if we wrap over div FACTOR... if so, add an extra bit (partially waste a block of 16 bytes)
    int mod_res = nbytes&(LT_FAC);
-   printf("mod_res = %08x, nbytes(%08x)&LT_FAC(%08x)SHFTFACTOR(%08x)\n", mod_res,nbytes,LT_FAC,SHFTFACTOR);
+   //printf("mod_res = %08x, nbytes(%08x)&LT_FAC(%08x)SHFTFACTOR(%08x)\n", mod_res,nbytes,LT_FAC,SHFTFACTOR);
 
    // if we wrap, add the extra FACTOR bytes to the div of nbytes.
    num_reqd_bits = (mod_res==0) ? nbytes >> SHFTFACTOR : ((nbytes - mod_res)>>SHFTFACTOR) +1;
@@ -104,14 +110,14 @@ static uint16_t bitsize[BLOCKS] = {0};
    uint16_t map_index;
 
    // Searching for free space within the bitmap.
-   printf("+=========================================+\n");
-   printf("bit_malloc %d bits needed for casted %d bytes from orig bytes %d\n",num_reqd_bits, num_reqd_bits*FACTOR, nbytes);   
-   printf("[S] free space search\n");
+   //printf("+=========================================+\n");
+   //printf("bit_malloc %d bits needed for casted %d bytes from orig bytes %d\n",num_reqd_bits, num_reqd_bits*FACTOR, nbytes);   
+   //printf("[S] free space search\n");
    for(cur_map_idx = 0; cur_map_idx < MAPBLOCKS; ++cur_map_idx) {
-      printf("Bitmap[%d] = 0x%08x\n",cur_map_idx, bitmap[cur_map_idx]);
+      //printf("Bitmap[%d] = 0x%08x\n",cur_map_idx, bitmap[cur_map_idx]);
       current_map = bitmap[cur_map_idx];
       for(int bit = 0; bit < 32; ++bit) {
-         printf("Result = ? 0x%08x\n",!(ROL(0x01,bit)&(current_map)));
+         //printf("Result = ? 0x%08x\n",!(ROL(0x01,bit)&(current_map)));
          // Check each bit by ROL the bit map.
          cur_bits_aqd = !(ROL(0x01,bit)&(current_map)) ? cur_bits_aqd+1 : 0;
          // Maintain State of which bit we end on.
@@ -119,21 +125,21 @@ static uint16_t bitsize[BLOCKS] = {0};
 
          if(cur_bits_aqd == num_reqd_bits) {
             bitmap_start_bit = bitmap_end_bit - num_reqd_bits;
-            printf("[E] free space search\n");
+            //printf("[E] free space search\n");
             goto BLOCK_CLAIM;
          }
       }
    }
 
-   printf("No available memory.\n");
+   //printf("No available memory.\n");
    return NULL;
 
    BLOCK_CLAIM:
 
-      printf("+=========================================+\n");
-      printf("BLOCK_CLAIM\n");
-      printf("bitmap_end_start = %d\n", bitmap_start_bit);
-      printf("bitmap_end_bit   = %d\n", bitmap_end_bit);
+      //printf("+=========================================+\n");
+      //printf("BLOCK_CLAIM\n");
+      //printf("bitmap_end_start = %d\n", bitmap_start_bit);
+      //printf("bitmap_end_bit   = %d\n", bitmap_end_bit);
 
       real_bit_mod_res = bitmap_start_bit&(0x1F);      
       map_index = (real_bit_mod_res==0) ? bitmap_start_bit>>5 : (bitmap_start_bit - real_bit_mod_res)>>5;
@@ -143,7 +149,7 @@ static uint16_t bitsize[BLOCKS] = {0};
       
       cur_bits_aqd = 0;
 
-      printf("    [S] block claim.\n");
+      //printf("    [S] block claim.\n");
       for(cur_map_idx = map_index; cur_map_idx < MAPBLOCKS; ++cur_map_idx) {
          current_map = bitmap[cur_map_idx];
          for(int bit = real_bit_mod_res; bit < 32; ++bit) {
@@ -151,7 +157,7 @@ static uint16_t bitsize[BLOCKS] = {0};
             ++cur_bits_aqd;
             if(cur_bits_aqd == num_reqd_bits) {
                bitmap[cur_map_idx] = current_map;
-               printf("    [E] free space search\n");
+               //printf("    [E] free space search\n");
                goto RET_ADDR;
             }
          }
@@ -160,8 +166,8 @@ static uint16_t bitsize[BLOCKS] = {0};
       }
 
    RET_ADDR:
-      printf("addr = %08x\n", (uint32_t)addr);
-      printf("+=========================================+\n\n");
+      //printf("addr = %08x\n", (uint32_t)addr);
+      //printf("+=========================================+\n\n");
       printbytes(1, 0, (uint32_t)addr);  
       return (void *)addr;
 }
@@ -180,14 +186,14 @@ static uint16_t bitsize[BLOCKS] = {0};
    uint16_t bits_to_free = bitsize[bitmap_start_bit];
    
 
-   printf("+=========================================+\n");
-   printf("-> Freeing Mem @ Address 0x%08x\n", (uint32_t)p);
-   printf("-> Starting bit: %d\n-> Starting idx: %d\n", bitmap_start_bit, map_index);
-   printf("-> Bit offset: %d\n", real_bit_mod_res);
-   printf("-> Bits to free: %d\n", bits_to_free);
-   printf("+=========================================+\n");
+   //printf("+=========================================+\n");
+   //printf("-> Freeing Mem @ Address 0x%08x\n", (uint32_t)p);
+   //printf("-> Starting bit: %d\n-> Starting idx: %d\n", bitmap_start_bit, map_index);
+   //printf("-> Bit offset: %d\n", real_bit_mod_res);
+   //printf("-> Bits to free: %d\n", bits_to_free);
+   //printf("+=========================================+\n");
 
-   printf("    [S] Bitmap clear.\n");
+   //printf("    [S] Bitmap clear.\n");
    for(int cur_map_idx = map_index; cur_map_idx < MAPBLOCKS; ++cur_map_idx) {
       uint32_t current_map = bitmap[cur_map_idx];
       for(int bit = real_bit_mod_res; bit < 32; ++bit) {
@@ -200,7 +206,7 @@ static uint16_t bitsize[BLOCKS] = {0};
       }
       bitmap[cur_map_idx] = current_map;
    }
-   printf("    [E] Bitmap clear.\n");
+   //printf("    [E] Bitmap clear.\n");
 }
 
 void * bit_calloc(unsigned nelem, unsigned elsize) {

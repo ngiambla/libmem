@@ -1,3 +1,10 @@
+//===-- memutils.c --------------------------------------------*- C -*--------===//
+//
+// This file is a header for all allocators...
+//
+// Written By: Nicholas V. Giamblanco
+//===-------------------------------------------------------------------------===//
+
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -7,11 +14,12 @@
 
 // Defines
 #define __DO_NOT_INLINE__ 				/* Can enforce each allocator to be separate functions */
+// #define __DEBUG__
 
 /* This makes each allocator's arena use 65536 bytes or 64 kB (Needs to be power of two) */
 #define ARENA_BYTES		65536
 /* Defines the minimum requestable size (only applies to buddy, bit and lut) (Needs to be power of two, and cannot be larger )*/
-#define MIN_REQ_SIZE 	2048
+#define MIN_REQ_SIZE 	16
 #define BUDDY_SAFETY_CHECK 		ARENA_BYTES/MIN_REQ_SIZE
 #if BUDDY_SAFETY_CHECK < 32
 #error "ARENA_BYTES/MIN_REQ_SIZE must be at most 32."

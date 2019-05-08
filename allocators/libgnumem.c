@@ -1,22 +1,23 @@
-//===-- u_gmem.cpp -----------------------------------------*- C -*--------===//
+//===-- libgnumem.c -------------------------------------------*- C -*--------===//
 //
 // This file implements a naive verion of Doug Lea's malloc() and free()
 // with optimizations for HLS.
 //
-// u_gmem stands for a [u]nified heap for a [G]NU style memory allocator.
 //
-// Ported By: Nicholas V. Giamblanco
-//===----------------------------------------------------------------------===//
+// Written By: Nicholas V. Giamblanco
+//===-------------------------------------------------------------------------===//
 
 // std-C Libs.
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <pthread.h> 
 
-// 
+// user-includes. 
 #include "memutils.h"
-
+pthread_mutex_t lock; 
+pthread_mutex_t freelock;
 
 /*
  * CHUNK header for heap management. Each Chunk requires a minimum size of 16 bytes (according to this alignment scheme)
@@ -30,7 +31,9 @@ typedef struct CHUNK {
 } CHUNK;
 
 
-//we store the freebit -- 1 if the chunk is free, 0 if it is reserved --
+// we store the freebit -- 1 if the chunk is free, 0 if it is reserved --
+// we used metadata to represent the free bit.
+
 #define SET_FREEBIT(chunk) ( (chunk)->meta = 0x01 )
 #define CLR_FREEBIT(chunk) ( (chunk)->meta = 0x00 )
 #define GET_FREEBIT(chunk) ( (chunk)->meta )
@@ -55,6 +58,7 @@ static CHUNK arena[ARENA_CHUNKS];
 static CHUNK *bot = NULL;       /* all free space, initially */
 static CHUNK *top = NULL;       /* delimiter chunk for top of arena */
 
+
 // This initializes the doubly-linked list of CHUNKS to point to the beginning and end of the arena (indicating the availability of the entire arena)
 static void init(void) {
   bot = &arena[0]; top = &arena[ARENA_CHUNKS-1];
@@ -64,11 +68,24 @@ static void init(void) {
   
   top->l = bot;  
   top->r = NULL;
-  top->meta = ~0x01;
+  top->meta = 0x0;
 }
 
-
-// This search through the doubly-linked list of chunks to find enough free space for an incoming request (returns NULL if no space is available.)
+//===-- gnu_malloc() -----------------------------------------*- C -*--------===//
+//  Searches through the doubly linked list for free space which meets
+// the request size
+// (ex)
+//
+//            +=====================+    
+//            |Node Under Inspection|
+//            +=========+===========+  
+//                      |
+//                +==========+------------------> +==========+----> (NEXTCHUNK)
+//                |CHUNK [1] |    FREE SPACE()    |CHUNK [0] |
+// (PREVCHUNK) <--+==========+ <------------------+==========+
+//
+// This 
+//===------------------------------------------------------------------------===//
 #ifdef __DO_NOT_INLINE__ 
    void * __attribute__ ((noinline)) gnu_malloc(unsigned nbytes)
 #else
@@ -80,12 +97,10 @@ static void init(void) {
   uint64_t size, chunksz;
   uint8_t res1, res2;
 
-  printdbg("[S] init\n");
 
   if (!bot){
     init();
   }
-  printdbg("[E] init\n");
 
   nbytes = (nbytes <= 0) ? 1 : nbytes;
 
@@ -98,10 +113,12 @@ static void init(void) {
 
   printdbg("[S] free loop check\n");
   p = bot;
-  while(p != NULL){
+
+  while(p != NULL) {
     chunksz = CHUNKSIZE(p);
     res1 = chunksz > size;
     res2 = chunksz == size;
+
     if (GET_FREEBIT(p) && (res1 || res2) ) {
         CLR_FREEBIT(p);
 
@@ -122,19 +139,23 @@ static void init(void) {
 
             SET_FREEBIT(q);
             printdbg("[E] remainder chunk calc\n");
-          }      
+          }
       break;
     }
-    p=p->r;
-  }
-  printdbg("[E] free loop check\n");
 
-  if(p) {
-    printbytes(1, 0, (uint32_t)FROMCHUNK(p));  
+    p = p->r;
   }
+
+  printdbg("[E] free loop check\n");
   return (!p) ? NULL : FROMCHUNK(p);
 
 }
+
+
+
+//=-------------------------------------------------------------------------------------=//
+////
+//=-------------------------------------------------------------------------------------=//
 
 #ifdef __DO_NOT_INLINE__ 
     void __attribute__ ((noinline)) gnu_free(void * vp)
@@ -151,8 +172,10 @@ static void init(void) {
 
   p = TOCHUNK(vp);
   CLR_FREEBIT(p);
+
   printdbg("[S] left consolidation\n");
   q = p->l;
+  
   if (q != NULL && GET_FREEBIT(q)) /* try to consolidate leftward */
     {
 
@@ -165,9 +188,8 @@ static void init(void) {
     }
   printdbg("[E] left consolidation\n");
 
-  q = p->r;
-
   printdbg("[S] right consolidation\n");
+  q = p->r;
   if (q != NULL && GET_FREEBIT(q)) /* try to consolidate rightward */
     {
       CLR_FREEBIT(q);
@@ -182,6 +204,18 @@ static void init(void) {
   SET_FREEBIT(p);
   printdbg("[E] set freebit\n");
 }
+
+
+#ifdef __DO_NOT_INLINE__ 
+    void __attribute__ ((noinline)) gnu_lazyfree(void * vp)
+#else   
+    void gnu_lazyfree(void * vp)
+#endif
+{
+    
+
+}
+
 
 void * gnu_realloc(void * vp, unsigned newbytes) {
   void *newp = NULL;

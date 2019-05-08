@@ -1,0 +1,25 @@
+
+
+\subsection{gnumem}
+
+
+	We now describe the gnu\_malloc() hardware module, which is visualized in Fig~\ref{}. When a malloc() is issued, the requested bytes are aligned to the arena alignmenet. Once aligned, this module fetches a CHUNK from the arena by sending out an address to the memory and waiting for the data to be sent back. Upon completion, we fetch the right neighbour of the current CHUNK. If this CHUNK is reserved, the right-neighbour becomes the current CHUNK. Otherwise, available space is computed, and a reservation is made. This requires rewriting the data at CHUNK by setting it's free flag. If all CHUNKS are inspected and none are free, this module returns an address of 0.  
+
+	The gnu\_free module fetches the CHUNK which exists at the address p. This CHUNK is updated to reflect that it is now free. Additionally, the left and right neighbours of this CHUNK are read in, to check if these CHUNKS can be coalesced to form a larger free CHUNK. No data is returned. 
+
+
+\subsection{linmem}
+
+	Referring to Fig~\ref{}, lin\_malloc() takes the request size and first checks if the current value of the pointer (a register that stores an address) would become out of range of the ARENA when incrementing the pointer. If not, we return the current pointer to the user. Then the pointer is incremented, which will now point to a segment of the ARENA which is reservable to the right of the pointer.
+
+
+\subsection{bitmem}
+
+	bit\_malloc()'s hardware representation is similar to gnu\_malloc(), and is represented in Fig~\ref{}. Upon the reception of a byte rquest, the request is aligned to 
+
+
+\subsection{budmem}
+
+	
+
+\subsection{}
