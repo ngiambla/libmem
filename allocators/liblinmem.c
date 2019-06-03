@@ -1,22 +1,15 @@
-//===-- liblinmem.c -------------------------------------------*- C -*--------===//
+//===-- liblinmem.cpp -----------------------------------------*- C -*--------===//
 //
-// This file implements a linear allocator (which simply bumps) a pointer to an
-// an address in the arena per incoming request.
+//
 //
 // Written By: Nicholas V. Giamblanco
 //===-------------------------------------------------------------------------===//
-
-// std-C Libs.
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
-#include <pthread.h>
 
-// user-includes. 
 #include "memutils.h"
-
-pthread_mutex_t lock; 
 
 typedef uint32_t LCHUNK;
 typedef uint32_t HEAPWIDTH;
@@ -36,9 +29,6 @@ static LCHUNK * END 		= &larena[LARENA_CHUNKS-1];
 void * __attribute__ ((noinline)) lin_malloc(unsigned nbytes) {
 	uint32_t size = nbytes;
 	uint32_t newsize=0;
-	printbytes(1, 1, size);
-
-	printdbg("    [S] Size Quantization\n");
 
 	if(size == 0) {
 		size = HEAPWIDTH_SZ;
@@ -50,24 +40,13 @@ void * __attribute__ ((noinline)) lin_malloc(unsigned nbytes) {
 		newsize=size;
 	}
 
-	printbytes(1, 2, newsize);
-
-	printdbg("    [E] Size Quantization\n");
-
-	printdbg("    [S] Pointer Increment\n");
 	if(newsize >= (END-CURR_ADDR)) {
 		printf(" Out of bounds...\n");
 		return NULL;
 	}
-    pthread_mutex_lock(&lock); //locking.
 	PREV_ADDR = CURR_ADDR;
 	CURR_ADDR += newsize;
-    pthread_mutex_unlock(&lock); //locking.	
 	
-	printbytes(1, 0, (uint32_t)GETADDR(PREV_ADDR));		
-
-	printdbg("    [E] Pointer Increment\n");
-
 	return GETADDR(PREV_ADDR);
 }
 

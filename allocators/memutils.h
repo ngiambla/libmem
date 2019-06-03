@@ -64,7 +64,5 @@ void * 	lut_calloc	(unsigned nelem, unsigned elsize);
 void 	lut_free	(void * p);
 //------------------------------------------
 
-void printdbg(char * strr);
-void printbytes(int isMalloc, int select, int value);
 
 #endif

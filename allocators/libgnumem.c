@@ -1,7 +1,7 @@
-//===-- libgnumem.c -------------------------------------------*- C -*--------===//
+//===-- libgnumem.cpp -----------------------------------------*- C -*--------===//
 //
 // This file implements a naive verion of Doug Lea's malloc() and free()
-// with optimizations for HLS.
+// with optimizations for HLS. This is commonly used within GNU frameworks.
 //
 //
 // Written By: Nicholas V. Giamblanco
@@ -12,12 +12,10 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
-#include <pthread.h> 
 
-// user-includes. 
+// 
 #include "memutils.h"
-pthread_mutex_t lock; 
-pthread_mutex_t freelock;
+
 
 /*
  * CHUNK header for heap management. Each Chunk requires a minimum size of 16 bytes (according to this alignment scheme)
@@ -31,9 +29,7 @@ typedef struct CHUNK {
 } CHUNK;
 
 
-// we store the freebit -- 1 if the chunk is free, 0 if it is reserved --
-// we used metadata to represent the free bit.
-
+//we store the freebit -- 1 if the chunk is free, 0 if it is reserved --
 #define SET_FREEBIT(chunk) ( (chunk)->meta = 0x01 )
 #define CLR_FREEBIT(chunk) ( (chunk)->meta = 0x00 )
 #define GET_FREEBIT(chunk) ( (chunk)->meta )
@@ -41,22 +37,22 @@ typedef struct CHUNK {
 /*
  * chunk size is implicit from l-r
  */
-#define CHUNKSIZE(chunk) ( (chunk)->r - (chunk) )
+#define CHUNKSIZE(chunk) ( (char *)(chunk)->r - (char *)(chunk) )
 
-/*
- * back or forward chunk header
- */
 
 #define TOCHUNK(vp) (-1 + (CHUNK *)(vp))
 #define FROMCHUNK(chunk) ((void *)(1 + (chunk)))
 
-/* for demo purposes, a static arena is good enough. */
 #define ARENA_CHUNKS (ARENA_BYTES/sizeof(CHUNK))
 
 static CHUNK arena[ARENA_CHUNKS];
-
 static CHUNK *bot = NULL;       /* all free space, initially */
 static CHUNK *top = NULL;       /* delimiter chunk for top of arena */
+
+/* For lazy free, store 32, 32-bit addresses */
+
+static uint32_t lazyhold[32];
+static uint8_t  lazyreserved = 0;
 
 
 // This initializes the doubly-linked list of CHUNKS to point to the beginning and end of the arena (indicating the availability of the entire arena)
@@ -71,21 +67,8 @@ static void init(void) {
   top->meta = 0x0;
 }
 
-//===-- gnu_malloc() -----------------------------------------*- C -*--------===//
-//  Searches through the doubly linked list for free space which meets
-// the request size
-// (ex)
-//
-//            +=====================+    
-//            |Node Under Inspection|
-//            +=========+===========+  
-//                      |
-//                +==========+------------------> +==========+----> (NEXTCHUNK)
-//                |CHUNK [1] |    FREE SPACE()    |CHUNK [0] |
-// (PREVCHUNK) <--+==========+ <------------------+==========+
-//
-// This 
-//===------------------------------------------------------------------------===//
+
+// This search through the doubly-linked list of chunks to find enough free space for an incoming request (returns NULL if no space is available.)
 #ifdef __DO_NOT_INLINE__ 
    void * __attribute__ ((noinline)) gnu_malloc(unsigned nbytes)
 #else
@@ -93,10 +76,8 @@ static void init(void) {
 #endif
 {
   CHUNK *p;
-  printbytes(1, 1, nbytes);  
   uint64_t size, chunksz;
   uint8_t res1, res2;
-
 
   if (!bot){
     init();
@@ -105,29 +86,21 @@ static void init(void) {
   nbytes = (nbytes <= 0) ? 1 : nbytes;
 
   /* Using Division to compute Upper Bound */
-  printdbg("[S] size check\n");
   size = sizeof(CHUNK) * ((nbytes+sizeof(CHUNK)-1)/sizeof(CHUNK) + 1); // Will be automatically converted into the corresponding shift operator defined in our paper 
-  printbytes(1, 2, size);  
-  printdbg("[E] size check\n");
-
-
-  printdbg("[S] free loop check\n");
   p = bot;
-
-  while(p != NULL) {
+  while(p != NULL){
     chunksz = CHUNKSIZE(p);
+
     res1 = chunksz > size;
     res2 = chunksz == size;
-
     if (GET_FREEBIT(p) && (res1 || res2) ) {
         CLR_FREEBIT(p);
 
         /* create a remainder chunk */
         if (res1) { 
-            printdbg("[S] remainder chunk calc\n");
             CHUNK * q, * pr;
 
-            q = (CHUNK *)(size + (char *)p);
+            q = (CHUNK *)(size + (char *)p );
             pr = p->r;
 
             q->l = p; 
@@ -138,24 +111,14 @@ static void init(void) {
             pr->l = q;
 
             SET_FREEBIT(q);
-            printdbg("[E] remainder chunk calc\n");
-          }
+          }      
       break;
     }
-
-    p = p->r;
+    p=p->r;
   }
-
-  printdbg("[E] free loop check\n");
   return (!p) ? NULL : FROMCHUNK(p);
 
 }
-
-
-
-//=-------------------------------------------------------------------------------------=//
-////
-//=-------------------------------------------------------------------------------------=//
 
 #ifdef __DO_NOT_INLINE__ 
     void __attribute__ ((noinline)) gnu_free(void * vp)
@@ -163,19 +126,14 @@ static void init(void) {
     void gnu_free(void * vp)
 #endif
  {
-  printbytes(0, 0, (uint32_t)vp);  
   CHUNK *p, *q;
-
   if (!vp) {
     return;
   }
 
   p = TOCHUNK(vp);
   CLR_FREEBIT(p);
-
-  printdbg("[S] left consolidation\n");
   q = p->l;
-  
   if (q != NULL && GET_FREEBIT(q)) /* try to consolidate leftward */
     {
 
@@ -186,10 +144,9 @@ static void init(void) {
 
       p = q;
     }
-  printdbg("[E] left consolidation\n");
 
-  printdbg("[S] right consolidation\n");
   q = p->r;
+
   if (q != NULL && GET_FREEBIT(q)) /* try to consolidate rightward */
     {
       CLR_FREEBIT(q);
@@ -197,25 +154,8 @@ static void init(void) {
       (q->r)->l = p;
       SET_FREEBIT(q);
     }
-  printdbg("[E] right consolidation\n");  
-
-  
-  printdbg("[S] set freebit\n");  
-  SET_FREEBIT(p);
-  printdbg("[E] set freebit\n");
+  SET_FREEBIT(p);  
 }
-
-
-#ifdef __DO_NOT_INLINE__ 
-    void __attribute__ ((noinline)) gnu_lazyfree(void * vp)
-#else   
-    void gnu_lazyfree(void * vp)
-#endif
-{
-    
-
-}
-
 
 void * gnu_realloc(void * vp, unsigned newbytes) {
   void *newp = NULL;
@@ -264,4 +204,26 @@ void * gnu_calloc(unsigned nelem, unsigned elsize) {
     cvp[i]='\0';
   }
   return vp;
+}
+
+
+
+#ifdef __DO_NOT_INLINE__ 
+    void __attribute__ ((noinline)) gnu_lazyfree(void * vp)
+#else   
+    void gnu_lazyfree(void * vp)
+#endif
+{
+
+  if(lazyreserved < 32) {
+    lazyhold[lazyreserved++] = (uint32_t)vp;
+  } else {
+    lazyreserved = 0;
+    gnu_free(vp);
+    for(int i = 0; i < 32; ++i) {
+      gnu_free((void*)lazyhold[i]);
+    }
+  }
+
+
 }

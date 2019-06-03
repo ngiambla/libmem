@@ -1,17 +1,16 @@
-//===-- liblutmem.c -------------------------------------------*- C -*--------===//
+//===-- liblutmem.cpp -----------------------------------------*- C -*--------===//
 //
-// This file implements a novel allocation mechanism, where preallocated
-// addresses can be fetched directly using an incoming request size.
 //
 //
 // Written By: Nicholas V. Giamblanco
 //===-------------------------------------------------------------------------===//
 
-#include "memutils.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
+
+#include "memutils.h"
 
 static uint32_t N0_FAST_ARENA___8[  64] 		= {0}; 
 static uint32_t N1_FAST_ARENA___8[  64] 		= {0}; 
@@ -159,7 +158,9 @@ static uint32_t * N_FAST_ADDRESS___LT[11][32] = {
 
 											};
 
-
+/* For lazy free, store 32, 32-bit addresses */
+static uint32_t lazyhold[32];
+static uint8_t  lazyreserved = 0;
 
 #define LT(n) n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n
 static const char LogTable256[256] = 
@@ -193,57 +194,26 @@ uint32_t ilog2 (uint32_t v) {  	// 32-bit word to find the log of
 
  {
 
-	printbytes(1, 1, bytes);
-	printdbg("    [S] Size Quantization\n");
-
 	uint32_t log2bytes 			= ilog2(bytes);
 	uint32_t roundbytes 		= 1 << log2bytes;
 	uint32_t logidx 			= (bytes > roundbytes ) ? log2bytes+1 : log2bytes;
 
-	printdbg("    [E] Size Quantization\n");
-
-
-	if(logidx < 3)
-		printbytes(1, 2, 32);
-	else {
-		printbytes(1, 2, 32 << (logidx-5));
-	}
-	if(logidx > 10) {
-		printf("Out of space.\n");
-		return NULL;
-	}
-
-	printdbg("    [S] Free Bit Location\n");
-
-	uint32_t FREE_ADDRESS 	= N_FREE_ADDRESS___LT[logidx];
-	if(FREE_ADDRESS != 0xFFFFFFFF) {
-		uint32_t z_vec 		= ~FREE_ADDRESS & ~(~FREE_ADDRESS-1);
-		uint32_t addr_idx 	= ilog2(z_vec);
-		N_FREE_ADDRESS___LT[logidx] |= z_vec;
-		uint32_t * addr 	= N_FAST_ADDRESS___LT[logidx][addr_idx]; 
-		printbytes(1, 0, (uint32_t)addr);
-		printdbg("    [E] Free Bit Location\n");
-
-		return (void *)addr;
-	}
 
 	// conduct linear search ^^ 
-	for(int i = logidx+1; i < 10; ++ i) {
-		FREE_ADDRESS 	= N_FREE_ADDRESS___LT[i];
+	for(int i = logidx; i < 10; ++ i) {
+		uint32_t FREE_ADDRESS 	= N_FREE_ADDRESS___LT[i];
 		if(FREE_ADDRESS != 0xFFFFFFFF) {
 			uint32_t z_vec 		= ~FREE_ADDRESS & ~(~FREE_ADDRESS-1);
 			uint32_t addr_idx 	= ilog2(z_vec);
 			N_FREE_ADDRESS___LT[i] |= z_vec;
 			uint32_t * addr 	= N_FAST_ADDRESS___LT[i][addr_idx]; 
-			printbytes(1, 0, (uint32_t)addr);		
-			printdbg("    [E] Free Bit Location\n");
 			return (void *)addr;
 		}
 	}
-	printf("returning NULL.\n");
 	return NULL;
 	
 }
+
 
 #ifdef __DO_NOT_INLINE__ 
     void __attribute__ ((noinline)) lut_free(void * p)
@@ -251,29 +221,20 @@ uint32_t ilog2 (uint32_t v) {  	// 32-bit word to find the log of
     void lut_free(void * p)
 #endif
 {
-	printbytes(0, 0, (uint32_t)p);
-	
 	uint32_t idx;
 	uint32_t addr = (uint32_t)p;
 
-	printdbg("    [S] Heap Locating.\n");
 	for(int i = 0; i < 11; ++i) {
 		uint32_t waddr = (uint32_t)N_FAST_ADDRESS___LT[i][0];
 		if( addr >= waddr && addr <= waddr+(8<<N_SHIFT_LEFTS__LT[i])) {
 			idx = i;
 			addr -= waddr;
-			printdbg("    [E] Heap Locating.\n");
-			break;
+			N_FREE_ADDRESS___LT[idx] &= ~(1 << ( (addr >> N_SHIFT_LEFTS__LT[idx])));
+			return;
 		}
 	}
-	
-	printdbg("    [S] Resetting Bit.\n");
-	if(idx < 11) {
-		N_FREE_ADDRESS___LT[idx] &= ~(1 << ( (addr >> N_SHIFT_LEFTS__LT[idx])));	
-	}
-	printdbg("    [E] Resetting Bit.\n");
-
 }
+
 
 void * lut_realloc(void * vp, unsigned newbytes) {
 	void *newp = NULL;
@@ -337,3 +298,23 @@ void * lut_calloc(unsigned nelem, unsigned elsize) {
   return vp;
 }
 
+
+#ifdef __DO_NOT_INLINE__ 
+    void __attribute__ ((noinline)) lut_lazyfree(void * vp)
+#else   
+    void lut_lazyfree(void * vp)
+#endif
+{
+
+  if(lazyreserved < 32) {
+    lazyhold[lazyreserved++] = (uint32_t)vp;
+  } else {
+    lazyreserved = 0;
+    lut_free(vp);
+    for(int i = 0; i < 32; ++i) {
+      lut_free((void*)lazyhold[i]);
+    }
+  }
+
+
+}
