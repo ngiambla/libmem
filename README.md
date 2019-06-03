@@ -25,6 +25,10 @@ This link is [here](https://github.com/ngiambla/dmbenchhls)!
 
 This library doesn't use off-chip memory. It strings together a bunch of BRAMs and uses this as a heap.
 
+This library is associated with this publication: Nicholas Giamblanco and Jason Anderson. A Dynamic Memory Allocation
+Library for High-Level Synthesis. In 2019 29th International Conference on Field
+Programmable Logic and Applications (FPL). IEEE, 2019
+
 
 ### Author
 
