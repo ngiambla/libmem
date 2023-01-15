@@ -11,6 +11,8 @@ Our library is configurable on a minimum request size.
 4. `libbudmem.c`: A buddy allocator, which is configurable on minimum request size.
 5. `liblutmem.c`: A LUT-like allocator, where a request size is mapped to a corresponding set of preallocated address, stored in a LUT.
 
+We also include the LLVM-Transformation Pass which was outlined in Dynamic Memory Allocation Techniques for High-Level Synthesis. This pass is able to convert stack allocated arrays into dynamic memory calls in order to reduce BRAM pressure within an FPGA. This pass lives in `transformation`
+
 ## Why do we need `libmem`
 
 For a beginner HLS developer wishing to port over designs using dynamic memory, it is not straightforward or easy to migrate designs to a static memory requirement.
@@ -28,6 +30,7 @@ This library doesn't use off-chip memory. It strings together a bunch of BRAMs a
 This library is associated with this publication: Nicholas Giamblanco and Jason Anderson. A Dynamic Memory Allocation
 Library for High-Level Synthesis. In 2019 29th International Conference on Field
 Programmable Logic and Applications (FPL). IEEE, 2019
+
 
 
 ### Author

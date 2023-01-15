@@ -1,7 +1,5 @@
 //===-- liblinmem.cpp -----------------------------------------*- C -*--------===//
-//
-//
-//
+// A Linear Allocator, written in Synthesizable C.
 // Written By: Nicholas V. Giamblanco
 //===-------------------------------------------------------------------------===//
 #include <stdio.h>
@@ -41,7 +39,6 @@ void * __attribute__ ((noinline)) lin_malloc(unsigned nbytes) {
 	}
 
 	if(newsize >= (END-CURR_ADDR)) {
-		printf(" Out of bounds...\n");
 		return NULL;
 	}
 	PREV_ADDR = CURR_ADDR;

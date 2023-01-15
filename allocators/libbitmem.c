@@ -1,7 +1,5 @@
 //===-- libbitmem.cpp -----------------------------------------*- C -*--------===//
-//
-//
-//
+// A Bit-map Allocator in Synthesizable C
 // Written By: Nicholas V. Giamblanco
 //===-------------------------------------------------------------------------===//
 #include "memutils.h"
@@ -52,9 +50,6 @@
                  )                                      \
    )
 
-
-
-
 #define ARENASIZE       ARENA_BYTES                   // Number of bytes available.
 #define FACTOR          MIN_REQ_SIZE                  // Each bitmap translates to 16 bytes (Must be a power of two).
 #define LT_FAC          FACTOR-1                      // Need to check for Less than Factors..
@@ -98,11 +93,9 @@ static uint8_t  lazyreserved = 0;
    // check if we need to add an extra bit for nbytes with values inbetween mod 16.
    // See if we wrap over div FACTOR... if so, add an extra bit (partially waste a block of 16 bytes)
    int mod_res = nbytes&(LT_FAC);
-   // printf("mod_res = %08x, nbytes(%08x)&LT_FAC(%08x)SHFTFACTOR(%08x)\n", mod_res,nbytes,LT_FAC,SHFTFACTOR);
 
    // if we wrap, add the extra FACTOR bytes to the div of nbytes.
    num_reqd_bits = (mod_res==0) ? nbytes >> SHFTFACTOR : ((nbytes - mod_res)>>SHFTFACTOR) +1;
-   //printbytes(1, 2, num_reqd_bits*MIN_REQ_SIZE);  
 
    uint16_t cur_bits_aqd      = 0; //Store bits acquired.
    uint16_t bitmap_start_bit  = 0; //Where to begin the mapping.
@@ -111,11 +104,7 @@ static uint8_t  lazyreserved = 0;
    uint16_t map_index;
 
    // Searching for free space within the bitmap.
-   // printf("+=========================================+\n");
-   // printf("bit_malloc %d bits needed for casted %d bytes from orig bytes %d\n",num_reqd_bits, num_reqd_bits*FACTOR, nbytes);   
-   // printf("[S] free space search\n");
    for(cur_map_idx = 0; cur_map_idx < MAPBLOCKS; ++cur_map_idx) {
-      // printf("Bitmap[%d] = 0x%08x\n",cur_map_idx, bitmap[cur_map_idx]);
       current_map = bitmap[cur_map_idx];
       for(int bit = 0; bit < 32; ++bit) {
          // Check each bit by ROL the bit map.
@@ -125,8 +114,6 @@ static uint8_t  lazyreserved = 0;
 
          if(cur_bits_aqd == num_reqd_bits) {
             bitmap_start_bit = bitmap_end_bit - num_reqd_bits;
-            // printdbg("    [E] Bitmap Search\n");
-
             goto BLOCK_CLAIM;
          }
       }
@@ -136,11 +123,6 @@ static uint8_t  lazyreserved = 0;
    return NULL;
 
    BLOCK_CLAIM:
-
-      // printf("+=========================================+\n");
-      // printf("BLOCK_CLAIM\n");
-      // printf("bitmap_end_start = %d\n", bitmap_start_bit);
-      // printf("bitmap_end_bit   = %d\n", bitmap_end_bit);
 
       real_bit_mod_res = bitmap_start_bit&(0x1F);      
       map_index = (real_bit_mod_res==0) ? bitmap_start_bit>>5 : (bitmap_start_bit - real_bit_mod_res)>>5;
@@ -165,9 +147,6 @@ static uint8_t  lazyreserved = 0;
       }
 
    RET_ADDR:
-      // printf("addr = %08x\n", (uint32_t)addr);
-      // printf("+=========================================+\n\n");
-      // printbytes(1, 0, (uint32_t)addr);  
       return (void *)addr;
 }
 
@@ -177,7 +156,6 @@ static uint8_t  lazyreserved = 0;
    void bit_free(void * p) 
 #endif
 {
-
    uint16_t bitmap_start_bit = (uint16_t)(((uint32_t *)p - arena_b) >> SHFTFACTOR);
    uint16_t real_bit_mod_res = bitmap_start_bit&(0x1F);      
    uint16_t map_index = (real_bit_mod_res==0) ? bitmap_start_bit>>5 : (bitmap_start_bit - real_bit_mod_res)>>5;
@@ -244,13 +222,11 @@ void * bit_realloc(void * vp, unsigned newbytes) {
       for(idx = 0; idx < bytes; ++ idx) {
          cnewp[idx]=cvp[idx];
       }
-   
    }
 
    bit_free(cvp);
    return (void *)cnewp;
 }
-
 
 #ifdef __DO_NOT_INLINE__ 
     void __attribute__ ((noinline)) bit_lazyfree(void * vp)
@@ -258,7 +234,6 @@ void * bit_realloc(void * vp, unsigned newbytes) {
     void bit_lazyfree(void * vp)
 #endif
 {
-
   if(lazyreserved < 32) {
     lazyhold[lazyreserved++] = (uint32_t)vp;
   } else {
@@ -268,6 +243,4 @@ void * bit_realloc(void * vp, unsigned newbytes) {
       bit_free((void*)lazyhold[i]);
     }
   }
-
-
 }
