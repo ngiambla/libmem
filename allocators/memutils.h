@@ -1,16 +1,15 @@
-//===-- memutils.c --------------------------------------------*- C -*--------===//
+//===-- memutils.h --------------------------------------------*- C -*--------===//
 //
 // This file is a header for all allocators...
 //
 // Written By: Nicholas V. Giamblanco
 //===-------------------------------------------------------------------------===//
+#ifndef __MEMUTILS_H__
+#define __MEMUTILS_H__
 
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-
-#ifndef __MEMUTILS_H__
-#define __MEMUTILS_H__
 
 // Defines
 #define __DO_NOT_INLINE__ 				/* Can enforce each allocator to be separate functions */
@@ -25,10 +24,7 @@
 #error "ARENA_BYTES/MIN_REQ_SIZE must be at most 32."
 #endif
 
-
-
 //==------------------------------------------==//
-//
 // [GNU - Based Allocation: Single Heap]
 void * 	gnu_malloc	(unsigned nbytes);
 void * 	gnu_realloc	(void * vp, unsigned newbytes);
@@ -63,6 +59,5 @@ void * 	lut_realloc	(void * p, unsigned newbytes);
 void * 	lut_calloc	(unsigned nelem, unsigned elsize);
 void 	lut_free	(void * p);
 //------------------------------------------
-
 
 #endif

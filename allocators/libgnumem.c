@@ -1,26 +1,19 @@
 //===-- libgnumem.cpp -----------------------------------------*- C -*--------===//
-//
 // This file implements a naive verion of Doug Lea's malloc() and free()
 // with optimizations for HLS. This is commonly used within GNU frameworks.
-//
-//
 // Written By: Nicholas V. Giamblanco
 //===-------------------------------------------------------------------------===//
 
-// std-C Libs.
+// Standard-Lib Includes
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
 
-// 
+// Memory Utils Includes.
 #include "memutils.h"
 
-
-/*
- * CHUNK header for heap management. Each Chunk requires a minimum size of 16 bytes (according to this alignment scheme)
- */
-
+// CHUNK header for heap management. Each Chunk requires a minimum size of 16 bytes (according to this alignment scheme)
 typedef struct CHUNK {
   uint8_t space_hold;
   struct CHUNK * l;
@@ -28,29 +21,22 @@ typedef struct CHUNK {
   uint8_t meta;
 } CHUNK;
 
-
-//we store the freebit -- 1 if the chunk is free, 0 if it is reserved --
+// We store the freebit -- 1 if the chunk is free, 0 if it is reserved --
 #define SET_FREEBIT(chunk) ( (chunk)->meta = 0x01 )
 #define CLR_FREEBIT(chunk) ( (chunk)->meta = 0x00 )
 #define GET_FREEBIT(chunk) ( (chunk)->meta )
 
-/*
- * chunk size is implicit from l-r
- */
+// chunk size is implicit from l-r
 #define CHUNKSIZE(chunk) ( (char *)(chunk)->r - (char *)(chunk) )
-
-
 #define TOCHUNK(vp) (-1 + (CHUNK *)(vp))
 #define FROMCHUNK(chunk) ((void *)(1 + (chunk)))
-
 #define ARENA_CHUNKS (ARENA_BYTES/sizeof(CHUNK))
 
 static CHUNK arena[ARENA_CHUNKS];
 static CHUNK *bot = NULL;       /* all free space, initially */
 static CHUNK *top = NULL;       /* delimiter chunk for top of arena */
 
-/* For lazy free, store 32, 32-bit addresses */
-
+// For lazy free, store 32, 32-bit addresses
 static uint32_t lazyhold[32];
 static uint8_t  lazyreserved = 0;
 
@@ -88,12 +74,12 @@ static void init(void) {
   /* Using Division to compute Upper Bound */
   size = sizeof(CHUNK) * ((nbytes+sizeof(CHUNK)-1)/sizeof(CHUNK) + 1); // Will be automatically converted into the corresponding shift operator defined in our paper 
   p = bot;
-  while(p != NULL){
+  while (p != NULL) {
     chunksz = CHUNKSIZE(p);
 
     res1 = chunksz > size;
     res2 = chunksz == size;
-    if (GET_FREEBIT(p) && (res1 || res2) ) {
+    if (GET_FREEBIT(p) && (res1 || res2)) {
         CLR_FREEBIT(p);
 
         /* create a remainder chunk */
@@ -106,7 +92,6 @@ static void init(void) {
             q->l = p; 
             q->r = pr;
             
-
             p->r = q; 
             pr->l = q;
 
@@ -114,7 +99,7 @@ static void init(void) {
           }      
       break;
     }
-    p=p->r;
+    p = p->r;
   }
   return (!p) ? NULL : FROMCHUNK(p);
 

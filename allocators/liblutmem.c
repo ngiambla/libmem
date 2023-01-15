@@ -1,7 +1,6 @@
 //===-- liblutmem.cpp -----------------------------------------*- C -*--------===//
-//
-//
-//
+// A Custom Memory Allocator using Look-Up Tables to hash to a 
+// "pool" of free memories. Written in Synthesizable C.
 // Written By: Nicholas V. Giamblanco
 //===-------------------------------------------------------------------------===//
 

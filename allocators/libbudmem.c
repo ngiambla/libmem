@@ -1,7 +1,5 @@
 //===-- libbudmem.cpp -----------------------------------------*- C -*--------===//
-//
-//
-//
+// A Buddy Memory Allocator written in Synthesizable C.
 // Written By: Nicholas V. Giamblanco
 //===-------------------------------------------------------------------------===//
 
@@ -12,7 +10,6 @@
 #include <math.h>
 
 #include "memutils.h"
-
 
 #define IS_REPRESENTIBLE_IN_D_BITS(D, N)                \
   (((unsigned long) N >= (1UL << (D - 1)) && (unsigned long) N < (1UL << D)) ? D : -1)
@@ -282,7 +279,7 @@ void * bud_realloc(void * vp, unsigned newbytes) {
 
 	int idx = 0;
 	/* behavior on corner cases conforms to SUSv2 */
-	if (vp == NULL)
+	if (!vp)
 		return bud_malloc(newbytes);
 
 	if (newbytes != 0) {
